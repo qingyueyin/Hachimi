@@ -1,12 +1,24 @@
 # Hachimi
 
 <p align="center">
-  <img src="ico/猫_256px.png" alt="Hachimi" width="128" height="128">
+  <img src="ico/猫_256px.png" alt="Hachimi Logo" width="128" height="128">
 </p>
 
-Android 网易云音乐下载工具。Kotlin + Jetpack Compose + [Miuix](https://github.com/compose-miuix-org/miuix)。
+<p align="center">
+  <b>Android 网易云音乐下载工具</b>
+</p>
 
-仓库：<https://github.com/qingyueyin/Hachimi>
+<p align="center">
+  <img src="https://img.shields.io/badge/Platform-Android-3DDC84?style=flat-square&logo=android" alt="Platform">
+  <img src="https://badgen.net/github/release/qingyueyin/Hachimi?icon=github" alt="Version">
+  <img src="https://img.shields.io/github/downloads/qingyueyin/Hachimi/total?style=flat-square" alt="Downloads">
+  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/Kotlin-2.3.21-7F52FF?style=flat-square&logo=kotlin" alt="Kotlin">
+  <a href="https://github.com/qingyueyin/Hachimi/stargazers"><img src="https://img.shields.io/github/stars/qingyueyin/Hachimi?style=flat-square" alt="Stars"></a>
+  <a href="https://linux.do"><img src="https://img.shields.io/badge/LINUX_DO-%E7%A4%BE%E5%8C%BA%20%E9%93%BE%E6%8E%A5-blue?style=flat-square" alt="LINUX DO"></a>
+</p>
+
+Kotlin + Jetpack Compose + [Miuix](https://github.com/compose-miuix-org/miuix)。
 
 > **本项目与网易云音乐及其关联公司无任何合作或授权关系。** 仅供学习交流与界面测试。使用前请阅读 [使用前须知](#使用前须知) 和 [LICENSE](LICENSE)。
 
