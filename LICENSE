@@ -1,0 +1,59 @@
+MIT License
+
+Copyright (c) 2026 Hachimi Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+## 源码许可与使用说明
+
+MIT License 约束的是**本仓库源代码的复制与再分发**。
+下列免责声明约束的是**使用本应用访问第三方服务、下载与传播内容**的行为。
+使用本软件侵犯他人版权（包括将下载内容用于传播或商业分发）不被允许。
+
+第三方组件许可证见 `THIRD_PARTY.md`。
+
+---
+
+## 免责声明 (Disclaimer)
+
+本软件仅供学习交流与界面测试。本软件与网易云音乐及其关联公司无任何合作
+或授权关系，所有商标及版权归其各自所有者所有。
+
+1. **用途限制**。不得将本软件用于商业运营、批量下载、传播或售卖受版权
+   保护的内容。
+2. **及时删除**。请在体验后尽快删除本软件，以及通过本软件保存的全部音频、
+   歌词与封面，建议不超过 24 小时。
+3. **版权与账号**。下载内容的版权归原权利人所有。部分功能需要登录网易云
+   音乐账号，请只使用你本人合法持有的账号。盗用他人账号或违反平台用户
+   协议导致的封号及其他后果，由使用者自行承担。
+4. **权限与数据**。保存到公共目录需要「所有文件访问权限」。登录凭据保存在
+   本机。导出日志可能包含设备型号与本地路径，请勿公开分享。
+5. **风险自负**。因使用本软件而产生的任何直接或间接损失，包括但不限于
+   账号异常、数据丢失、功能中断、第三方接口变更及法律风险，均由使用者
+   自行承担。本软件按现状提供，作者不保证可下载内容的完整性、音质或
+   持续可用，亦不承担任何责任。
+6. **获取渠道**。请只从 https://github.com/qingyueyin/Hachimi 的 Releases
+   安装官方构建。「Hachimi」名称与图标仅限官方使用；其他来源的安装包
+   可能被篡改或倒卖。源码以 MIT 许可，允许自行编译，但不得冒充官方包
+   进行销售。
+
+应用首次启动会展示上述条款，须勾选确认后才能进入。之后可在应用内
+「设置 → 使用前须知」再次阅读。

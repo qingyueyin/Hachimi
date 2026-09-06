@@ -1,0 +1,119 @@
+# Gradle
+.gradle/
+build/
+!app/build/generated/
+!app/build/generated/res/pngs/
+
+# IDE
+*.iml
+*.ipr
+*.iws
+.idea/
+*.jpx
+*.njsproj
+*.sln
+*.sw?
+.vscode/
+.png/
+
+# Android
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+*.aar
+*.so
+!app/src/main/jniLibs/**/*.so
+bin/
+gen/
+out/
+captures/
+intermediates/
+intermediates-not-packaged/
+apk/
+androidTest/
+
+# NDK
+obj/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# IntelliJ
+*.iml
+.ipr
+.iws
+
+# Keystore files
+*.jks
+*.keystore
+
+# External native build folder
+.externalNativeBuild
+.cxx/
+
+# Version control
+.svn/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Log
+*.log
+
+# Python
+*.pyc
+__pycache__/
+
+# Project specific
+.history
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+$null
+
+# Agent / local tooling (keep on disk, do not publish)
+.claude/
+.opencode/
+.superpowers/
+.reasonix/
+.kotlin/
+docs/superpowers/
+
+# Build artifacts
+output/
+/output/
+release/
+badging.txt
+permissions.txt
+
+# Trae
+.trae/rules/
+.trae/Skills/
+.trae/
+
+# Proguard
+proguard/
+
+# Lint
+lint/
+lint-results.xml
+lint-report/
+
+# Firebase
+firebase-debug.log
+firebase-debug.*.log
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+fastlane/README.md
+

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 使用前须知
+    url: https://github.com/qingyueyin/Hachimi/blob/main/LICENSE
+    about: 提问前请先读免责声明。本项目与网易云音乐无关联。
+  - name: 安全漏洞（私密）
+    url: https://github.com/qingyueyin/Hachimi/security/advisories/new
+    about: 不要在公开 Issue 里贴利用细节或 Cookie。

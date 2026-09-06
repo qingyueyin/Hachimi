@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- MIUIX 风格基础主题 — 配合 Compose MiuixTheme 使用 -->
+    <style name="Theme.Hachimi" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- 状态栏透明，由 Compose 自行控制 -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- MIUIX 标准圆角 -->
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+</resources>

@@ -1,0 +1,59 @@
+name: 缺陷报告
+description: 崩溃、下载失败、界面错误等
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请阅读仓库 [LICENSE](https://github.com/qingyueyin/Hachimi/blob/main/LICENSE) 中的使用前须知。
+        **不要**粘贴 Cookie、`MUSIC_U`、账号备份或未打码日志。
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 确认
+      options:
+        - label: 我已阅读使用前须知，不会把本软件用于传播或售卖下载内容
+          required: true
+        - label: 本 Issue 不含 Cookie、密码或其他凭据
+          required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: 实际发生了什么
+      description: 写现象，不要只写「不能用」。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: android
+    attributes:
+      label: 系统
+      placeholder: Android 13 / HyperOS / ColorOS …
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充
+      description: 可附截图。日志请先自行确认没有凭据。

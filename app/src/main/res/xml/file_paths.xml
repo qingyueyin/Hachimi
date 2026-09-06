@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- App-internal: logs and fallback copies -->
+    <files-path name="internal" path="." />
+    <cache-path name="cache" path="." />
+    <external-files-path name="ext_files" path="." />
+    <!-- Public dirs the app actually writes to (not the whole volume) -->
+    <external-path name="hachimi" path="Hachimi/" />
+    <external-path name="music" path="Music/" />
+    <external-path name="download" path="Download/" />
+    <external-path name="downloads" path="Downloads/" />
+</paths>
