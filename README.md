@@ -18,7 +18,7 @@
   <a href="https://linux.do"><img src="https://img.shields.io/badge/LINUX_DO-%E7%A4%BE%E5%8C%BA%20%E9%93%BE%E6%8E%A5-blue?style=flat-square" alt="LINUX DO"></a>
 </p>
 
-Kotlin + Jetpack Compose + [Miuix](https://github.com/compose-miuix-org/miuix)。
+技术栈：Kotlin + Jetpack Compose + [Miuix](https://github.com/compose-miuix-org/miuix)。
 
 > **本项目与网易云音乐及其关联公司无任何合作或授权关系。** 仅供学习交流与界面测试。使用前请阅读 [使用前须知](#使用前须知) 和 [LICENSE](LICENSE)。
 
