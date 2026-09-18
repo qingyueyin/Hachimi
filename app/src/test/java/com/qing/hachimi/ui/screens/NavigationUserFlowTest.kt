@@ -84,6 +84,7 @@ class NavigationUserFlowTest {
             seenManager = mock(SeenManager::class.java),
             discoveryCache = mock(DiscoveryCacheManager::class.java),
             accountHistory = mock(AccountHistoryManager::class.java),
+            okHttpClient = mock(okhttp3.OkHttpClient::class.java),
         )
     }
 }

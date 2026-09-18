@@ -81,6 +81,7 @@ import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.icon.extended.Theme
 import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.window.WindowDialog
+import com.qing.hachimi.util.UpdateInfo
 
 @OptIn(ExperimentalScrollBarApi::class)
 @Composable
@@ -99,6 +100,7 @@ fun SettingsTab(
     onOpenDownloadSettings: () -> Unit = {},
     onOpenAccountSettings: () -> Unit = {},
     onOpenPreviewFeatures: () -> Unit = {},
+    onOpenAboutSettings: () -> Unit = {},
     onThemeBaseModeChanged: (Int) -> Unit = {},
     onToggleMonetTheme: () -> Unit = {},
     onShareLog: () -> Unit = {},
@@ -110,9 +112,7 @@ fun SettingsTab(
     scrollToTopTrigger: Int = 0,
 ) {
     val listState = rememberLazyListState()
-    var showDisclaimerDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val versionSummary = remember(context) { OfficialBuild.versionSummary(context) }
     LaunchedEffect(scrollToTopTrigger) {
         if (scrollToTopTrigger > 0) {
             listState.animateScrollToItem(0)
@@ -250,79 +250,41 @@ fun SettingsTab(
         }
 
         // ═════════════════════════════════════════════════════════════
-        // 关于
+        // 关于 - 跳转到二级页面
         // ═════════════════════════════════════════════════════════════
         item {
             Card(
                 modifier = Modifier
                     .padding(horizontal = 12.dp)
-                    .padding(vertical = 12.dp)
+                    .padding(top = 12.dp)
                     .fillMaxWidth()
             ) {
                 ArrowPreference(
-                    title = "使用前须知",
-                    summary = "免责声明与使用限制",
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Notes,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "使用前须知",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    onClick = { showDisclaimerDialog = true }
-                )
-
-                ArrowPreference(
-                    title = "版本",
-                    summary = versionSummary,
+                    title = "关于",
+                    summary = "版本、更新日志、免责声明",
                     startAction = {
                         Icon(
                             MiuixIcons.Info,
                             modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "版本",
+                            contentDescription = "关于",
                             tint = colorScheme.onBackground
                         )
                     },
-                    onClick = {
-                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        cm.setPrimaryClip(ClipData.newPlainText("version", versionSummary))
-                        Toast.makeText(context, "已复制版本号", Toast.LENGTH_SHORT).show()
-                    },
+                    onClick = onOpenAboutSettings
                 )
+            }
+        }
 
-                ArrowPreference(
-                    title = "GitHub",
-                    summary = OfficialBuild.REPO_URL,
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Link,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "GitHub",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    onClick = {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse(OfficialBuild.RELEASES_URL)),
-                        )
-                    },
-                )
-
-                ArrowPreference(
-                    title = "导出日志",
-                    summary = "用于反馈问题；可能包含设备型号与本地路径，请勿公开分享",
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Report,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "导出日志",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    onClick = onShareLog
-                )
-
+        // ═════════════════════════════════════════════════════════════
+        // 维护工具
+        // ═════════════════════════════════════════════════════════════
+        item {
+            Card(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .padding(top = 12.dp)
+                    .fillMaxWidth()
+            ) {
                 ArrowPreference(
                     title = "重置发现页",
                     summary = "清除发现页缓存并重新加载",
@@ -357,11 +319,6 @@ fun SettingsTab(
             Spacer(modifier = Modifier.height(LocalMainBottomContentPadding.current))
         }
     }
-    DisclaimerDialog(
-        show = showDisclaimerDialog,
-        requireAccept = false,
-        onDismiss = { showDisclaimerDialog = false },
-    )
     VerticalScrollBar(
         adapter = rememberScrollBarAdapter(listState),
         modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
@@ -1054,6 +1011,191 @@ fun PreviewFeaturesScreen(
             }
             item {
                 Spacer(modifier = Modifier.height(LocalMainBottomContentPadding.current))
+            }
+        }
+        VerticalScrollBar(
+            adapter = rememberScrollBarAdapter(listState),
+            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+        )
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 关于二级页面
+// ═════════════════════════════════════════════════════════════════════════════
+
+@OptIn(ExperimentalScrollBarApi::class)
+@Composable
+fun AboutSettingsScreen(
+    uiState: MainUiState,
+    viewModel: MainViewModel,
+    onShareLog: () -> Unit,
+    onBack: () -> Unit,
+    innerPadding: PaddingValues = PaddingValues(0.dp),
+) {
+    val listState = rememberLazyListState()
+    val context = LocalContext.current
+    val versionSummary = remember(context) { OfficialBuild.versionSummary(context) }
+    var showDisclaimerDialog by remember { mutableStateOf(false) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = innerPadding,
+        ) {
+            item { SecondaryPageHeader("关于", onBack) }
+            item {
+                Card(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .padding(top = 12.dp)
+                        .fillMaxWidth()
+                ) {
+                    ArrowPreference(
+                        title = "使用前须知",
+                        summary = "免责声明与使用限制",
+                        startAction = {
+                            Icon(
+                                MiuixIcons.Notes,
+                                modifier = Modifier.padding(end = 6.dp),
+                                contentDescription = "使用前须知",
+                                tint = colorScheme.onBackground
+                            )
+                        },
+                        onClick = { showDisclaimerDialog = true }
+                    )
+
+                    ArrowPreference(
+                        title = "版本",
+                        summary = versionSummary,
+                        startAction = {
+                            Icon(
+                                MiuixIcons.Info,
+                                modifier = Modifier.padding(end = 6.dp),
+                                contentDescription = "版本",
+                                tint = colorScheme.onBackground
+                            )
+                        },
+                        onClick = {
+                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            cm.setPrimaryClip(ClipData.newPlainText("version", versionSummary))
+                            Toast.makeText(context, "已复制版本号", Toast.LENGTH_SHORT).show()
+                        },
+                    )
+
+                    ArrowPreference(
+                        title = "检查更新",
+                        summary = if (uiState.isCheckingUpdate) "检查中..." else "检查是否有新版本可用",
+                        startAction = {
+                            Icon(
+                                MiuixIcons.FileDownloads,
+                                modifier = Modifier.padding(end = 6.dp),
+                                contentDescription = "检查更新",
+                                tint = colorScheme.onBackground
+                            )
+                        },
+                        onClick = { viewModel.checkForUpdate() }
+                    )
+
+                    ArrowPreference(
+                        title = "GitHub",
+                        summary = OfficialBuild.REPO_URL,
+                        startAction = {
+                            Icon(
+                                MiuixIcons.Link,
+                                modifier = Modifier.padding(end = 6.dp),
+                                contentDescription = "GitHub",
+                                tint = colorScheme.onBackground
+                            )
+                        },
+                        onClick = {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(OfficialBuild.RELEASES_URL)),
+                            )
+                        },
+                    )
+
+                    ArrowPreference(
+                        title = "导出日志",
+                        summary = "用于反馈问题；可能包含设备型号与本地路径，请勿公开分享",
+                        startAction = {
+                            Icon(
+                                MiuixIcons.Report,
+                                modifier = Modifier.padding(end = 6.dp),
+                                contentDescription = "导出日志",
+                                tint = colorScheme.onBackground
+                            )
+                        },
+                        onClick = onShareLog
+                    )
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(LocalMainBottomContentPadding.current))
+            }
+        }
+        DisclaimerDialog(
+            show = showDisclaimerDialog,
+            requireAccept = false,
+            onDismiss = { showDisclaimerDialog = false },
+        )
+
+        // Update check dialog
+        uiState.updateInfo?.let { info ->
+            if (info.hasUpdate) {
+                WindowDialog(
+                    show = true,
+                    title = "发现新版本 v${info.latestVersion}",
+                    summary = info.releaseNotes.take(200).ifBlank { "暂无更新日志" },
+                    onDismissRequest = { viewModel.dismissUpdateDialog() }
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                        if (info.releaseNotes.length > 200) {
+                            Text(
+                                text = "...",
+                                style = MiuixTheme.textStyles.body2,
+                                color = colorScheme.onSurfaceVariantActions,
+                            )
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                text = "稍后",
+                                onClick = { viewModel.dismissUpdateDialog() }
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Button(
+                                onClick = {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(info.downloadUrl))
+                                    )
+                                    viewModel.dismissUpdateDialog()
+                                }
+                            ) {
+                                Text("前往下载")
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+            }
+        }
+
+        uiState.updateError?.let { error ->
+            LaunchedEffect(error) {
+                Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
+                viewModel.consumeUpdateFeedback()
+            }
+        }
+        uiState.updateToast?.let { toast ->
+            LaunchedEffect(toast) {
+                Toast.makeText(context, toast, Toast.LENGTH_SHORT).show()
+                viewModel.consumeUpdateFeedback()
             }
         }
         VerticalScrollBar(

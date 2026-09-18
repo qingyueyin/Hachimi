@@ -122,6 +122,7 @@ fun MainScreen(
     var showDownloadSettings by remember { mutableStateOf(false) }
     var showAccountSettings by remember { mutableStateOf(false) }
     var showPreviewFeatures by remember { mutableStateOf(false) }
+    var showAboutSettings by remember { mutableStateOf(false) }
     var showQualityUpgrade by remember { mutableStateOf(false) }
     var showCookieDialog by remember { mutableStateOf(false) }
     var cookieInput by remember { mutableStateOf("") }
@@ -182,6 +183,7 @@ fun MainScreen(
                         showAppearanceSettings = false
                         showDownloadSettings = false
                         showPreviewFeatures = false
+                        showAboutSettings = false
                         showQualityUpgrade = false
                         viewModel.scrollToTop()
                     }
@@ -307,6 +309,7 @@ fun MainScreen(
         showDownloadSettings = currentTab == Tab.SETTINGS && showDownloadSettings,
         showAccountSettings = currentTab == Tab.SETTINGS && showAccountSettings,
         showPreviewFeatures = currentTab == Tab.SETTINGS && showPreviewFeatures,
+        showAboutSettings = currentTab == Tab.SETTINGS && showAboutSettings,
         showQualityUpgrade = currentTab == Tab.SETTINGS && showQualityUpgrade,
         showSearchBack = showSearchBack,
         showDiscoverBack = showDiscoverBack,
@@ -372,6 +375,7 @@ fun MainScreen(
             ContextBackTarget.ACCOUNT_SETTINGS -> showAccountSettings = false
             ContextBackTarget.QUALITY_UPGRADE -> showQualityUpgrade = false
             ContextBackTarget.PREVIEW_FEATURES -> showPreviewFeatures = false
+            ContextBackTarget.ABOUT_SETTINGS -> showAboutSettings = false
             ContextBackTarget.SEARCH_DETAIL -> searchViewModel.goBack()
             ContextBackTarget.DISCOVER -> {
                 val returnToSearch = discoverState.shouldReturnToSearch
@@ -576,16 +580,19 @@ fun MainScreen(
                     showDownloadSettings = showDownloadSettings,
                     showAccountSettings = showAccountSettings,
                     showPreviewFeatures = showPreviewFeatures,
+                    showAboutSettings = showAboutSettings,
                     showQualityUpgrade = showQualityUpgrade,
                     onOpenAppearanceSettings = { showAppearanceSettings = true },
                     onOpenDownloadSettings = { showDownloadSettings = true },
                     onOpenAccountSettings = { showAccountSettings = true },
                     onOpenPreviewFeatures = { showPreviewFeatures = true },
+                    onOpenAboutSettings = { showAboutSettings = true },
                     onOpenQualityUpgrade = { showPreviewFeatures = true; showQualityUpgrade = true },
                     onCloseAppearanceSettings = performContextBack,
                     onCloseDownloadSettings = performContextBack,
                     onCloseAccountSettings = performContextBack,
                     onClosePreviewFeatures = performContextBack,
+                    onCloseAboutSettings = performContextBack,
                     onCloseQualityUpgrade = performContextBack,
                     onToggleBlurEffect = viewModel::toggleBlurEffect,
                     onToggleLiquidGlass = viewModel::toggleLiquidGlass,
@@ -1200,6 +1207,7 @@ internal enum class ContextBackTarget(val usesContextHeader: Boolean) {
     DOWNLOAD_SETTINGS(false),
     ACCOUNT_SETTINGS(false),
     PREVIEW_FEATURES(false),
+    ABOUT_SETTINGS(false),
     QUALITY_UPGRADE(false),
     SEARCH_DETAIL(true),
     DISCOVER(true),
@@ -1216,10 +1224,12 @@ internal fun resolveContextBackTarget(
     showMyPlaylistBack: Boolean,
     showSearchSubBack: Boolean,
     showPreviewFeatures: Boolean = false,
+    showAboutSettings: Boolean = false,
     showQualityUpgrade: Boolean = false,
 ): ContextBackTarget? = when {
     showQualityUpgrade -> ContextBackTarget.QUALITY_UPGRADE
     showPreviewFeatures -> ContextBackTarget.PREVIEW_FEATURES
+    showAboutSettings -> ContextBackTarget.ABOUT_SETTINGS
     showAppearanceSettings -> ContextBackTarget.APPEARANCE_SETTINGS
     showDownloadSettings -> ContextBackTarget.DOWNLOAD_SETTINGS
     showAccountSettings -> ContextBackTarget.ACCOUNT_SETTINGS
@@ -1412,16 +1422,19 @@ private fun TabContent(
     showDownloadSettings: Boolean,
     showAccountSettings: Boolean,
     showPreviewFeatures: Boolean = false,
+    showAboutSettings: Boolean = false,
     showQualityUpgrade: Boolean = false,
     onOpenAppearanceSettings: () -> Unit,
     onOpenDownloadSettings: () -> Unit,
     onOpenAccountSettings: () -> Unit,
     onOpenPreviewFeatures: () -> Unit = {},
+    onOpenAboutSettings: () -> Unit = {},
     onOpenQualityUpgrade: () -> Unit = {},
     onCloseAppearanceSettings: () -> Unit,
     onCloseDownloadSettings: () -> Unit,
     onCloseAccountSettings: () -> Unit,
     onClosePreviewFeatures: () -> Unit = {},
+    onCloseAboutSettings: () -> Unit = {},
     onCloseQualityUpgrade: () -> Unit = {},
     onToggleBlurEffect: () -> Unit = {},
     onToggleLiquidGlass: () -> Unit = {},
@@ -1588,8 +1601,9 @@ private fun TabContent(
             }
             Tab.SETTINGS -> {
                 val settingsSubPage = when {
-                    showQualityUpgrade -> 5
-                    showPreviewFeatures -> 4
+                    showQualityUpgrade -> 6
+                    showPreviewFeatures -> 5
+                    showAboutSettings -> 4
                     showAccountSettings -> 3
                     showAppearanceSettings -> 1
                     showDownloadSettings -> 2
@@ -1630,6 +1644,7 @@ private fun TabContent(
                                 onOpenDownloadSettings = onOpenDownloadSettings,
                                 onOpenAccountSettings = onOpenAccountSettings,
                                 onOpenPreviewFeatures = onOpenPreviewFeatures,
+                                onOpenAboutSettings = onOpenAboutSettings,
                                 onThemeBaseModeChanged = viewModel::updateThemeBaseMode,
                                 onToggleMonetTheme = viewModel::toggleMonetTheme,
                                 onShareLog = {
@@ -1719,9 +1734,24 @@ private fun TabContent(
                                     .fillMaxSize()
                                     .background(colorScheme.surface)
                             ) {
-                                PreviewFeaturesScreen(
-                                    onOpenQualityUpgrade = onOpenQualityUpgrade,
-                                    onBack = onClosePreviewFeatures,
+                                AboutSettingsScreen(
+                                    uiState = uiState,
+                                    viewModel = viewModel,
+                                    onShareLog = {
+                                        val logFile = File(AppLogger.getLogFilePath())
+                                        val uri = if (logFile.exists()) ShareableFile.contentUri(context, logFile) else null
+                                        if (uri != null) {
+                                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                                type = "text/plain"
+                                                putExtra(Intent.EXTRA_STREAM, uri)
+                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            }
+                                            context.startActivity(Intent.createChooser(intent, "导出日志"))
+                                        } else {
+                                            Toast.makeText(context, "暂无可导出的日志", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    onBack = onCloseAboutSettings,
                                     innerPadding = innerPadding,
                                 )
                             }
@@ -1785,7 +1815,8 @@ private fun ContextBackPreview(
         ContextBackTarget.APPEARANCE_SETTINGS,
         ContextBackTarget.DOWNLOAD_SETTINGS,
         ContextBackTarget.ACCOUNT_SETTINGS,
-        ContextBackTarget.PREVIEW_FEATURES -> {
+        ContextBackTarget.PREVIEW_FEATURES,
+        ContextBackTarget.ABOUT_SETTINGS -> {
             SettingsTab(
                 uiState = uiState,
                 viewModel = viewModel,

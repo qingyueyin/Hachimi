@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -31,7 +30,7 @@ internal fun hierarchicalNavigationTransition(
     suppress: Boolean = false,
 ): ContentTransform {
     if (suppress) {
-        return EnterTransition.None togetherWith ExitTransition.None
+        return ContentTransform(EnterTransition.None, ExitTransition.None, sizeTransform = null)
     }
     val direction = if (layoutDirection >= 0) 1 else -1
     val spatialSpec = spring<IntOffset>(
@@ -55,13 +54,16 @@ internal fun hierarchicalNavigationTransition(
         },
     ) + fadeOut(animationSpec = tween(durationMillis = 140))
 
-    return enter.togetherWith(exit)
+    return ContentTransform(enter, exit, sizeTransform = null)
 }
 
 /** Peer views do not imply a spatial hierarchy. */
 internal fun peerContentTransition(): ContentTransform =
-    fadeIn(animationSpec = tween(durationMillis = 160))
-        .togetherWith(fadeOut(animationSpec = tween(durationMillis = 100)))
+    ContentTransform(
+        fadeIn(animationSpec = tween(durationMillis = 160)),
+        fadeOut(animationSpec = tween(durationMillis = 100)),
+        sizeTransform = null,
+    )
 
 /**
  * 同级 Tab 切换：方向感知 + 临界阻尼。
@@ -78,8 +80,11 @@ internal fun directionalTabTransition(
     density: Density,
 ): ContentTransform {
     if (reduceMotion) {
-        return fadeIn(animationSpec = tween(durationMillis = 120))
-            .togetherWith(fadeOut(animationSpec = tween(durationMillis = 120)))
+        return ContentTransform(
+            fadeIn(animationSpec = tween(durationMillis = 120)),
+            fadeOut(animationSpec = tween(durationMillis = 120)),
+            sizeTransform = null,
+        )
     }
     val sign = if (isForward) 1 else -1
     val direction = sign * layoutDirection
@@ -103,7 +108,7 @@ internal fun directionalTabTransition(
         animationSpec = tabSpring,
         targetOffsetX = { -direction * exitOffset },
     ) + fadeOut(animationSpec = alphaSpring)
-    return enter.togetherWith(exit)
+    return ContentTransform(enter, exit, sizeTransform = null)
 }
 
 /** Hide the outgoing page from accessibility while the active page stays on top. */

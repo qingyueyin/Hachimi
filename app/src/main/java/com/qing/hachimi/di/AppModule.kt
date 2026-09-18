@@ -109,7 +109,8 @@ val appModule = module {
             settingsManager = get(),
             seenManager = get(),
             discoveryCache = get(),
-            accountHistory = get()
+            accountHistory = get(),
+            okHttpClient = get()
         )
     }
     viewModel { DiscoverViewModel(repository = get(), cookieManager = get(), settingsManager = get(), discoveryCache = get(), seenManager = get(), downloadEngine = get()) }

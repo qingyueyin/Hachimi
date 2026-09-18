@@ -4,6 +4,7 @@ import com.qing.hachimi.data.api.*
 import com.qing.hachimi.data.local.CookieManager
 import com.qing.hachimi.data.model.*
 import com.qing.hachimi.util.AppLogger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -37,6 +38,20 @@ class NeteaseRepository(
 
     private fun cookies() = cookieManager.getCookiesWithAnonFallback()
 
+    private fun Throwable.rethrowIfCancellation() {
+        if (this is CancellationException) throw this
+    }
+
+    private inline fun <T> runCatchingCancellable(block: () -> T): Result<T> {
+        return try {
+            Result.success(block())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun getPlaylistDetail(playlistId: String): Result<CollectionContent> = withContext(Dispatchers.IO) {
         try {
             AppLogger.debug("getPlaylistDetail: id=$playlistId")
@@ -63,6 +78,7 @@ class NeteaseRepository(
                 ),
             )
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getPlaylistDetail failed", e)
             Result.failure(e)
         }
@@ -95,6 +111,7 @@ class NeteaseRepository(
                 AppLogger.debug("getSongUrl: got url for $songId at quality=$q")
                 return@withContext Result.success(secureUrl)
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 lastError = e.message
                 AppLogger.warn("getSongUrl: quality=$q failed for $songId, trying next: ${e.message}")
             }
@@ -110,6 +127,7 @@ class NeteaseRepository(
                 ?: return@withContext Result.failure(Exception("无法获取歌词 (ID: $songId)"))
             Result.success(lyric)
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getLyric failed", e)
             Result.failure(e)
         }
@@ -119,6 +137,7 @@ class NeteaseRepository(
         try {
             songApi.getLyricFull(songId, cookies())
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getLyricFull failed", e)
             null
         }
@@ -134,6 +153,7 @@ class NeteaseRepository(
             }
             Result.success(result.songs)
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("search failed for '$keywords'", e)
             Result.failure(Exception("搜索失败: ${e.message}"))
         }
@@ -143,6 +163,7 @@ class NeteaseRepository(
         try {
             Result.success(discoveryApi.getSearchSuggestions(keywords, cookies()))
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.warn("getSearchSuggestions failed for '$keywords': ${e.message}")
             Result.success(emptyList())
         }
@@ -153,11 +174,11 @@ class NeteaseRepository(
             AppLogger.debug("searchAll: keywords=$keywords")
             val requestCookies = cookies()
             val batch = coroutineScope {
-                val songsRequest = async { runCatching { searchApi.searchSongs(keywords, requestCookies, 30, 0) } }
-                val albumsRequest = async { runCatching { searchApi.searchAlbums(keywords, requestCookies, 20, 0) } }
-                val artistsRequest = async { runCatching { searchApi.searchArtists(keywords, requestCookies, 20, 0) } }
-                val playlistsRequest = async { runCatching { searchApi.searchPlaylists(keywords, requestCookies, 20, 0) } }
-                val podcastsRequest = async { runCatching { searchApi.searchPodcasts(keywords, requestCookies, 20, 0) } }
+                val songsRequest = async { runCatchingCancellable { searchApi.searchSongs(keywords, requestCookies, 30, 0) } }
+                val albumsRequest = async { runCatchingCancellable { searchApi.searchAlbums(keywords, requestCookies, 20, 0) } }
+                val artistsRequest = async { runCatchingCancellable { searchApi.searchArtists(keywords, requestCookies, 20, 0) } }
+                val playlistsRequest = async { runCatchingCancellable { searchApi.searchPlaylists(keywords, requestCookies, 20, 0) } }
+                val podcastsRequest = async { runCatchingCancellable { searchApi.searchPodcasts(keywords, requestCookies, 20, 0) } }
                 SearchBatch(
                     songs = songsRequest.await(),
                     albums = albumsRequest.await(),
@@ -168,6 +189,7 @@ class NeteaseRepository(
             }
             val failures = listOf(batch.songs, batch.albums, batch.artists, batch.playlists, batch.podcasts)
                 .mapNotNull { it.exceptionOrNull() }
+            failures.forEach { it.rethrowIfCancellation() }
             if (failures.size == 5) throw failures.first()
             failures.forEach { AppLogger.warn("searchAll: partial category failure: ${it.message}") }
 
@@ -178,7 +200,7 @@ class NeteaseRepository(
             val podcasts = batch.podcasts.getOrDefault(SearchPodcastsResult())
             val exactArtist = artists.artists.firstOrNull { matchesExactArtist(keywords, it) }
             val artistAlbumPage = exactArtist?.let { artist ->
-                runCatching {
+                runCatchingCancellable {
                     artistApi.getAlbumsPage(
                         artistId = artist.id,
                         cookies = requestCookies,
@@ -214,6 +236,7 @@ class NeteaseRepository(
                 albumArtistId = artistAlbumPage?.let { exactArtist.id },
             ))
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("searchAll failed for '$keywords'", e)
             Result.failure(Exception("搜索失败: ${e.message}"))
         }
@@ -229,6 +252,7 @@ class NeteaseRepository(
                 hasMore = result.hasMore
             ))
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
@@ -243,6 +267,7 @@ class NeteaseRepository(
                 hasMore = result.hasMore
             ))
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
@@ -250,12 +275,12 @@ class NeteaseRepository(
     suspend fun getSongTagMetadata(songId: String): SongTagMetadata = withContext(Dispatchers.IO) {
         coroutineScope {
             val detailRequest = async {
-                runCatching { songApi.getDetail(songId, cookies()) }
+                runCatchingCancellable { songApi.getDetail(songId, cookies()) }
                     .onFailure { AppLogger.warn("getSongTagMetadata detail failed for $songId: ${it.message}") }
                     .getOrNull()
             }
             val creatorRequest = async {
-                runCatching { songApi.getCreators(songId, cookies()) }
+                runCatchingCancellable { songApi.getCreators(songId, cookies()) }
                     .onFailure { AppLogger.warn("getSongTagMetadata creators failed for $songId: ${it.message}") }
                     .getOrNull()
             }
@@ -297,6 +322,7 @@ class NeteaseRepository(
                 ),
             )
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
@@ -311,6 +337,7 @@ class NeteaseRepository(
                 hasMore = result.hasMore
             ))
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
@@ -340,6 +367,7 @@ class NeteaseRepository(
                 ),
             )
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getAlbumDetail failed", e)
             Result.failure(e)
         }
@@ -364,6 +392,7 @@ class NeteaseRepository(
                 )
             )
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getSingleSong failed", e)
             Result.failure(e)
         }
@@ -377,6 +406,7 @@ class NeteaseRepository(
         try {
             loginApi.qrKey()
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("qrKey failed", e)
             null
         }
@@ -386,6 +416,7 @@ class NeteaseRepository(
         try {
             loginApi.checkQr(unikey, sessionCookies)
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("checkQr failed", e)
             LoginApi.QrStatus(-1, message = "检查状态失败: ${e.message}")
         }
@@ -397,13 +428,14 @@ class NeteaseRepository(
         try {
             Result.success(discoveryApi.getChartList(cookies()))
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
 
     suspend fun getRecommendedPlaylists(limit: Int = 12): Result<List<DiscoveryPlaylist>> =
         withContext(Dispatchers.IO) {
-            runCatching {
+            runCatchingCancellable {
                 discoveryApi.getRecommendedPlaylists(cookies(), limit).map { playlist ->
                     playlist.copy(coverUrl = normalizeCoverUrl(playlist.coverUrl))
                 }
@@ -415,7 +447,7 @@ class NeteaseRepository(
         limit: Int = 30,
         offset: Int = 0,
     ): Result<DiscoveryPage<DiscoveryPlaylist>> = withContext(Dispatchers.IO) {
-        runCatching {
+        runCatchingCancellable {
             discoveryApi.getPlaylists(cookies(), category.apiValue, limit, offset).let { page ->
                 page.copy(items = page.items.map { it.copy(coverUrl = normalizeCoverUrl(it.coverUrl)) })
             }
@@ -428,7 +460,7 @@ class NeteaseRepository(
         limit: Int = 30,
         offset: Int = 0,
     ): Result<DiscoveryPage<DiscoveryPlaylist>> = withContext(Dispatchers.IO) {
-        runCatching {
+        runCatchingCancellable {
             discoveryApi.getPlaylists(cookies(), tag, limit, offset).let { page ->
                 page.copy(items = page.items.map { it.copy(coverUrl = normalizeCoverUrl(it.coverUrl)) })
             }
@@ -440,7 +472,7 @@ class NeteaseRepository(
         limit: Int = 30,
         offset: Int = 0,
     ): Result<DiscoveryPage<ArtistResult>> = withContext(Dispatchers.IO) {
-        runCatching {
+        runCatchingCancellable {
             discoveryApi.getArtists(cookies(), area, limit, offset).let { page ->
                 page.copy(items = page.items.map { it.copy(avatarUrl = normalizeCoverUrl(it.avatarUrl)) })
             }
@@ -451,7 +483,7 @@ class NeteaseRepository(
         limit: Int = 30,
         offset: Int = 0,
     ): Result<DiscoveryPage<PodcastChannel>> = withContext(Dispatchers.IO) {
-        runCatching {
+        runCatchingCancellable {
             discoveryApi.getPodcasts(cookies(), limit, offset).let { page ->
                 page.copy(items = page.items.map { it.copy(coverUrl = normalizeCoverUrl(it.coverUrl)) })
             }
@@ -463,7 +495,7 @@ class NeteaseRepository(
         limit: Int = 50,
         offset: Int = 0,
     ): Result<DiscoveryPage<Song>> = withContext(Dispatchers.IO) {
-        runCatching {
+        runCatchingCancellable {
             discoveryApi.getPodcastPrograms(channel, cookies(), limit, offset).let { page ->
                 page.copy(items = page.items.map { it.copy(coverUrl = normalizeCoverUrl(it.coverUrl)) })
             }
@@ -471,7 +503,7 @@ class NeteaseRepository(
     }
 
     suspend fun getPodcastDetail(id: Long): Result<PodcastChannel> = withContext(Dispatchers.IO) {
-        runCatching {
+        runCatchingCancellable {
             discoveryApi.getPodcastDetail(id, cookies()).let { podcast ->
                 podcast.copy(coverUrl = normalizeCoverUrl(podcast.coverUrl))
             }
@@ -485,6 +517,7 @@ class NeteaseRepository(
                 songs = result.songs.map { it.copy(coverUrl = normalizeCoverUrl(it.coverUrl)) }
             ))
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
@@ -494,6 +527,7 @@ class NeteaseRepository(
             val songs = discoveryApi.getDailyRecommendSongs(cookies())
             Result.success(songs.map { it.copy(coverUrl = normalizeCoverUrl(it.coverUrl)) })
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
@@ -503,6 +537,7 @@ class NeteaseRepository(
             Result.success(discoveryApi.getNewAlbums(cookies(), limit, offset)
                 .map { it.copy(coverUrl = normalizeCoverUrl(it.coverUrl)) })
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
@@ -511,6 +546,7 @@ class NeteaseRepository(
         try {
             Result.success(discoveryApi.getHotSearchKeywords(cookies()))
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
@@ -543,6 +579,7 @@ class NeteaseRepository(
             }
             Result.success(songs)
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getPersonalFm failed", e)
             Result.failure(e)
         }
@@ -555,6 +592,7 @@ class NeteaseRepository(
                 result.map { it.copy(coverUrl = normalizeCoverUrl(it.coverUrl)) }
             }
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getCloudSongs failed", e)
             Result.failure(e)
         }
@@ -569,6 +607,7 @@ class NeteaseRepository(
             val secureUrl = if (info.url.startsWith("http://")) "https://${info.url.substring(7)}" else info.url
             Result.success(secureUrl)
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
@@ -579,6 +618,7 @@ class NeteaseRepository(
             val list = playlistApi.getUserPlaylists(userId, cookies(), limit, offset)
             Result.success(list.map { it.copy(coverUrl = normalizeCoverUrl(it.coverUrl)) })
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
@@ -588,6 +628,7 @@ class NeteaseRepository(
             val list = playlistApi.getLikedSongs(userId, cookies())
             Result.success(list.map { toSong(it) })
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getLikedSongs failed", e)
             Result.failure(e)
         }
@@ -600,6 +641,7 @@ class NeteaseRepository(
             val songs = artistApi.getTopSongs(artistId, cookies())
             Result.success(songs.map { it.copy(coverUrl = normalizeCoverUrl(it.coverUrl)) })
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
@@ -614,13 +656,14 @@ class NeteaseRepository(
                 ),
             )
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
 
     suspend fun loadMorePlaylists(keywords: String, offset: Int): Result<SearchPlaylistsResult> =
         withContext(Dispatchers.IO) {
-            runCatching {
+            runCatchingCancellable {
                 searchApi.searchPlaylists(keywords, cookies(), 20, offset).let { result ->
                     result.copy(
                         playlists = result.playlists.map {
@@ -633,7 +676,7 @@ class NeteaseRepository(
 
     suspend fun loadMorePodcasts(keywords: String, offset: Int): Result<SearchPodcastsResult> =
         withContext(Dispatchers.IO) {
-            runCatching {
+            runCatchingCancellable {
                 searchApi.searchPodcasts(keywords, cookies(), 20, offset).let { result ->
                     result.copy(
                         podcasts = result.podcasts.map {
@@ -653,6 +696,7 @@ class NeteaseRepository(
             val page = artistApi.getAlbumsPage(artistId, cookies(), limit, offset)
             Result.success(page.copy(items = page.items.map { it.copy(coverUrl = normalizeCoverUrl(it.coverUrl)) }))
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
@@ -662,6 +706,7 @@ class NeteaseRepository(
             val albums = artistApi.getAlbums(artistId, cookies(), limit, offset)
             Result.success(albums.map { it.copy(coverUrl = normalizeCoverUrl(it.coverUrl)) })
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
@@ -670,6 +715,7 @@ class NeteaseRepository(
         try {
             Result.success(artistApi.getIntroduction(artistId, cookies()))
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
@@ -679,6 +725,7 @@ class NeteaseRepository(
             val artists = artistApi.getSimilarArtists(artistId, cookies())
             Result.success(artists.map { it.copy(avatarUrl = normalizeCoverUrl(it.avatarUrl)) })
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Result.failure(e)
         }
     }
@@ -694,6 +741,7 @@ class NeteaseRepository(
         try {
             Result.success(listenDataApi.getUserRecord(userId, type, cookies()).map { toRecordEntry(it) })
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getUserRecord failed", e)
             Result.failure(e)
         }
@@ -703,6 +751,7 @@ class NeteaseRepository(
         try {
             Result.success(listenDataApi.getRecentListen(cookies()).map { toRecordEntry(it) })
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getRecentListen failed", e)
             Result.failure(e)
         }
@@ -712,6 +761,7 @@ class NeteaseRepository(
         try {
             Result.success(listenDataApi.getTodaySongRank(cookies()).map { toRecordEntry(it) })
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getTodaySongRank failed", e)
             Result.failure(e)
         }
@@ -721,6 +771,7 @@ class NeteaseRepository(
         try {
             Result.success(listenDataApi.getSongPlayRank(type, cookies()).map { toRecordEntry(it) })
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getSongPlayRank failed", e)
             Result.failure(e)
         }
@@ -733,6 +784,7 @@ class NeteaseRepository(
                 it.copy(topSongs = it.topSongs.map { entry -> toRecordEntry(entry) })
             })
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getYearReport failed", e)
             Result.failure(e)
         }
@@ -745,6 +797,7 @@ class NeteaseRepository(
                 it.copy(topSongs = it.topSongs.map { entry -> toRecordEntry(entry) })
             })
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getAnnualSummary failed", e)
             Result.failure(e)
         }
@@ -759,6 +812,7 @@ class NeteaseRepository(
                 page.copy(items = page.items.map { it.copy(coverUrl = normalizeCoverUrl(it.coverUrl)) })
             )
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getSubscribedAlbums failed", e)
             Result.failure(e)
         }
@@ -771,6 +825,7 @@ class NeteaseRepository(
                 page.copy(items = page.items.map { it.copy(avatarUrl = normalizeCoverUrl(it.avatarUrl)) })
             )
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getSubscribedArtists failed", e)
             Result.failure(e)
         }
@@ -783,6 +838,7 @@ class NeteaseRepository(
             val songs = discoveryApi.getNewSongs(cookies(), areaId)
             Result.success(songs.map { it.copy(coverUrl = normalizeCoverUrl(it.coverUrl)) })
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getNewSongs failed", e)
             Result.failure(e)
         }
@@ -792,6 +848,7 @@ class NeteaseRepository(
         try {
             Result.success(discoveryApi.getStyleTags(cookies()))
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             AppLogger.error("getStyleTags failed", e)
             Result.failure(e)
         }

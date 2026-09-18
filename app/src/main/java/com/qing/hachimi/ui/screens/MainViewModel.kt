@@ -16,9 +16,15 @@ import com.qing.hachimi.data.repository.NeteaseRepository
 import com.qing.hachimi.downloader.DownloadEngine
 import com.qing.hachimi.downloader.DownloadPreparation
 import com.qing.hachimi.ui.theme.ColorMode
+import com.qing.hachimi.BuildConfig
 import com.qing.hachimi.util.AppLogger
+import com.qing.hachimi.util.UpdateChecker
+import com.qing.hachimi.util.UpdateInfo
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 data class MainUiState(
     val isLoggedIn: Boolean = false,
@@ -75,6 +81,11 @@ data class MainUiState(
     val scrollToTopTrigger: Int = 0,
     val scrollToTopTab: String = "",
     val currentTab: String = "DISCOVER",
+    // Update check state
+    val isCheckingUpdate: Boolean = false,
+    val updateInfo: UpdateInfo? = null,
+    val updateError: String? = null,
+    val updateToast: String? = null,
 )
 
 class MainViewModel(
@@ -84,7 +95,8 @@ class MainViewModel(
     private val settingsManager: SettingsManager,
     private val seenManager: SeenManager,
     private val discoveryCache: DiscoveryCacheManager,
-    private val accountHistory: AccountHistoryManager
+    private val accountHistory: AccountHistoryManager,
+    private val okHttpClient: okhttp3.OkHttpClient
 ) : ViewModel() {
 
     private val _uiState = kotlinx.coroutines.flow.MutableStateFlow(MainUiState())
@@ -142,6 +154,57 @@ class MainViewModel(
         preloadDiscoveryCache()
     }
 
+    fun checkForUpdate() {
+        if (_uiState.value.isCheckingUpdate) return
+        _uiState.value = _uiState.value.copy(
+            isCheckingUpdate = true,
+            updateError = null,
+            updateInfo = null,
+            updateToast = null,
+        )
+
+        viewModelScope.launch {
+            try {
+                val info = withTimeout(CHECK_UPDATE_TIMEOUT_MS) {
+                    UpdateChecker.check(okHttpClient, BuildConfig.VERSION_NAME)
+                }
+                _uiState.value = if (info.hasUpdate) {
+                    _uiState.value.copy(isCheckingUpdate = false, updateInfo = info)
+                } else {
+                    _uiState.value.copy(
+                        isCheckingUpdate = false,
+                        updateToast = "已是最新版本 v${info.latestVersion}",
+                    )
+                }
+            } catch (_: TimeoutCancellationException) {
+                _uiState.value = _uiState.value.copy(
+                    isCheckingUpdate = false,
+                    updateError = "检查超时，请检查网络后重试",
+                )
+            } catch (e: CancellationException) {
+                _uiState.value = _uiState.value.copy(isCheckingUpdate = false)
+                throw e
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isCheckingUpdate = false,
+                    updateError = "检查更新失败: ${e.message}",
+                )
+            }
+        }
+    }
+
+    fun dismissUpdateDialog() {
+        _uiState.value = _uiState.value.copy(updateInfo = null)
+    }
+
+    fun consumeUpdateFeedback() {
+        _uiState.value = _uiState.value.copy(updateError = null, updateToast = null)
+    }
+
+    companion object {
+        private const val CHECK_UPDATE_TIMEOUT_MS = 10_000L
+    }
+
     private fun preloadDiscoveryCache() {
         viewModelScope.launch(Dispatchers.IO) {
             discoveryCache.getCachedCharts()?.let { cached ->
@@ -183,6 +246,8 @@ class MainViewModel(
                 } else {
                     AppLogger.warn("Failed to initialize anonymous token")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLogger.error("initAnonymousToken exception", e)
             } finally {
@@ -391,6 +456,8 @@ class MainViewModel(
                         return@launch
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLogger.error("QR login: exception", e)
                 _qrStatusMessage.value = "登录异常: ${e.message}"
@@ -831,6 +898,8 @@ class MainViewModel(
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     _uiState.value = _uiState.value.copy(statusMessage = "缓存已清除")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     _uiState.value = _uiState.value.copy(statusMessage = "清除缓存失败: ${e.message}")
@@ -1433,6 +1502,8 @@ class MainViewModel(
                 accountHistory.saveAccount(account)
                 AppLogger.info("[MainVM] Saved account history: ${account.nickname}")
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.error("[MainVM] Failed to save account history", e)
         }
