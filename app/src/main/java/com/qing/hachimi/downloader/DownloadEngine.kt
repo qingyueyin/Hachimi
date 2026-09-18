@@ -310,14 +310,16 @@ class DownloadEngine(
     ) {
         AppLogger.debug("startDownload: songId=$songId, name=$name, url=${sanitizeUrlForLog(url)}, hasCookie=${cookie != null}, overwrite=$overwrite")
         // Skip if already in a terminal state
-        if (tasks.containsKey(songId) && !overwrite) {
-            val existing = tasks[songId]!!
-            when (existing.status) {
-                DownloadStatus.DOWNLOADING -> return
-                DownloadStatus.PAUSED -> { resumeDownload(songId); return }
-                DownloadStatus.COMPLETED -> return
-                DownloadStatus.CANCELLED, DownloadStatus.FAILED -> { /* allow restart */ }
-                else -> {}
+        if (!overwrite) {
+            val existing = tasks[songId]
+            if (existing != null) {
+                when (existing.status) {
+                    DownloadStatus.DOWNLOADING -> return
+                    DownloadStatus.PAUSED -> { resumeDownload(songId); return }
+                    DownloadStatus.COMPLETED -> return
+                    DownloadStatus.CANCELLED, DownloadStatus.FAILED -> { /* allow restart */ }
+                    else -> {}
+                }
             }
         }
 
@@ -415,7 +417,10 @@ class DownloadEngine(
     }
 
     private suspend fun awaitRunnable(task: TaskInfo): Boolean {
-        while (task.status == DownloadStatus.PAUSED) delay(200)
+        while (task.status == DownloadStatus.PAUSED) {
+            currentCoroutineContext().ensureActive()
+            delay(200)
+        }
         return task.status != DownloadStatus.CANCELLED
     }
 

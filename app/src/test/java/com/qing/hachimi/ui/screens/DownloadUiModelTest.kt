@@ -57,6 +57,31 @@ class DownloadUiModelTest {
     }
 
     @Test
+    fun `download manager keeps heading in the same scroll list as tasks`() {
+        val active = listOf(
+            progress(1, DownloadStatus.DOWNLOADING, 1),
+            progress(2, DownloadStatus.PAUSED, 2),
+        )
+        val completed = listOf(
+            progress(3, DownloadStatus.COMPLETED, 3).copy(artists = "A"),
+            progress(4, DownloadStatus.COMPLETED, 4).copy(artists = "B"),
+        )
+
+        assertEquals(
+            listOf("heading", "summary:active", 1L, 2L),
+            DownloadUiModel.scrollItemKeys(DownloadView.ACTIVE, active, completed),
+        )
+        assertEquals(
+            listOf("heading", "summary:completed", "artist:B", 4L, "artist:A", 3L),
+            DownloadUiModel.scrollItemKeys(DownloadView.COMPLETED, active, completed),
+        )
+        assertEquals(
+            listOf("heading", "summary:active", "empty"),
+            DownloadUiModel.scrollItemKeys(DownloadView.ACTIVE, emptyList(), completed),
+        )
+    }
+
+    @Test
     fun `failure label uses specific message then falls back`() {
         val withReason = progress(1, DownloadStatus.FAILED, 1).copy(errorMessage = "网络中断，请重试")
         val blank = progress(2, DownloadStatus.FAILED, 2).copy(errorMessage = "  ")

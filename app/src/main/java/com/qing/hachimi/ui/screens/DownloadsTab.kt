@@ -1,6 +1,5 @@
 package com.qing.hachimi.ui.screens
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -83,118 +82,109 @@ fun DownloadsTab(
     val retryTargets = remember(downloadProgress) { DownloadUiModel.retryTargets(allTasks) }
     val completedTargets = remember(downloadProgress) { DownloadUiModel.completedTargets(allTasks) }
     val listState = rememberLazyListState()
+    val tasks = if (selectedView == DownloadView.ACTIVE) activeTasks else completedTasks
+    val groupedTasks = remember(tasks) { DownloadUiModel.groupByArtist(tasks) }
     LaunchedEffect(scrollToTopTrigger) {
         if (scrollToTopTrigger > 0) {
             listState.animateScrollToItem(0)
         }
     }
+    LaunchedEffect(selectedView) {
+        listState.scrollToItem(0)
+    }
 
-    Column(
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = innerPadding.calculateTopPadding())
-                .padding(horizontal = AppSpacing.md),
-        ) {
-            ScreenHeading("下载")
-            UnderlineTabsBar(
-                tabs = listOf("进行中 ${activeTasks.size}", "已完成 ${completedTasks.size}"),
-                selectedIndex = selectedView.ordinal,
-                onSelect = { selectedView = DownloadView.entries[it] },
-                modifier = Modifier.padding(top = AppSpacing.xs),
-            )
-            Spacer(Modifier.height(AppSpacing.sm))
-
-            if (selectedView == DownloadView.ACTIVE) {
-                ActiveSummary(allTasks, sessionStartedAt)
-                if (pauseTargets.isNotEmpty() || resumeTargets.isNotEmpty() || retryTargets.isNotEmpty()) {
-                    Spacer(Modifier.height(AppSpacing.sm))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
-                        if (pauseTargets.isNotEmpty()) {
-                            item {
-                                BatchActionButton(
-                                    label = "全部暂停",
-                                    icon = MiuixIcons.Pause,
-                                    onClick = { onPauseAll(pauseTargets) },
-                                )
-                            }
-                        }
-                        if (resumeTargets.isNotEmpty()) {
-                            item {
-                                BatchActionButton(
-                                    label = "全部继续",
-                                    icon = MiuixIcons.Play,
-                                    onClick = { onResumeAll(resumeTargets) },
-                                )
-                            }
-                        }
-                        if (retryTargets.isNotEmpty()) {
-                            item {
-                                BatchActionButton(
-                                    label = "全部重试",
-                                    icon = MiuixIcons.Refresh,
-                                    onClick = { onRetryAll(retryTargets) },
-                                )
-                            }
-                        }
-                    }
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "${completedTasks.size} 个文件",
-                        style = MiuixTheme.textStyles.body1,
-                        color = colorScheme.onSurfaceVariantActions,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (completedTargets.isNotEmpty()) {
-                        BatchActionButton(
-                            label = "清除记录",
-                            icon = MiuixIcons.Clear,
-                            onClick = onDismissCompletedAll,
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(AppSpacing.sm))
-        }
-
-        AnimatedContent(
-            targetState = selectedView,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            transitionSpec = {
-                peerContentTransition()
-            },
-            label = "DownloadViewTransition",
-        ) { view ->
-            val tasks = if (view == DownloadView.ACTIVE) activeTasks else completedTasks
-            val groupedTasks = remember(tasks) { DownloadUiModel.groupByArtist(tasks) }
-            CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
-            Box(modifier = Modifier.fillMaxSize()) {
+    CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
+        Box(modifier = Modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     start = AppSpacing.md,
                     end = AppSpacing.md,
-                    top = AppSpacing.xs,
+                    top = innerPadding.calculateTopPadding(),
                     bottom = LocalMainBottomContentPadding.current,
                 ),
                 verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
             ) {
+                item(key = "heading") {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        ScreenHeading("下载")
+                        UnderlineTabsBar(
+                            tabs = listOf("进行中 ${activeTasks.size}", "已完成 ${completedTasks.size}"),
+                            selectedIndex = selectedView.ordinal,
+                            onSelect = { selectedView = DownloadView.entries[it] },
+                            modifier = Modifier.padding(top = AppSpacing.xs),
+                        )
+                    }
+                }
+                if (selectedView == DownloadView.ACTIVE) {
+                    item(key = "summary:active") {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            ActiveSummary(allTasks, sessionStartedAt)
+                            if (pauseTargets.isNotEmpty() || resumeTargets.isNotEmpty() || retryTargets.isNotEmpty()) {
+                                Spacer(Modifier.height(AppSpacing.sm))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+                                    if (pauseTargets.isNotEmpty()) {
+                                        item {
+                                            BatchActionButton(
+                                                label = "全部暂停",
+                                                icon = MiuixIcons.Pause,
+                                                onClick = { onPauseAll(pauseTargets) },
+                                            )
+                                        }
+                                    }
+                                    if (resumeTargets.isNotEmpty()) {
+                                        item {
+                                            BatchActionButton(
+                                                label = "全部继续",
+                                                icon = MiuixIcons.Play,
+                                                onClick = { onResumeAll(resumeTargets) },
+                                            )
+                                        }
+                                    }
+                                    if (retryTargets.isNotEmpty()) {
+                                        item {
+                                            BatchActionButton(
+                                                label = "全部重试",
+                                                icon = MiuixIcons.Refresh,
+                                                onClick = { onRetryAll(retryTargets) },
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    item(key = "summary:completed") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "${completedTasks.size} 个文件",
+                                style = MiuixTheme.textStyles.body1,
+                                color = colorScheme.onSurfaceVariantActions,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (completedTargets.isNotEmpty()) {
+                                BatchActionButton(
+                                    label = "清除记录",
+                                    icon = MiuixIcons.Clear,
+                                    onClick = onDismissCompletedAll,
+                                )
+                            }
+                        }
+                    }
+                }
                 if (tasks.isEmpty()) {
-                    item {
+                    item(key = "empty") {
                         Box(
                             modifier = Modifier.fillMaxWidth().height(180.dp),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = if (view == DownloadView.ACTIVE) {
+                                text = if (selectedView == DownloadView.ACTIVE) {
                                     "当前没有进行中的任务"
                                 } else {
                                     "还没有完成的下载"
@@ -204,7 +194,7 @@ fun DownloadsTab(
                             )
                         }
                     }
-                } else if (view == DownloadView.COMPLETED) {
+                } else if (selectedView == DownloadView.COMPLETED) {
                     groupedTasks.forEach { (artist, groupTasks) ->
                         item(key = "artist:$artist") {
                             ArtistGroupHeader(artist, groupTasks.size)
@@ -241,8 +231,6 @@ fun DownloadsTab(
                 adapter = rememberScrollBarAdapter(listState),
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
             )
-            }
-            }
         }
     }
 

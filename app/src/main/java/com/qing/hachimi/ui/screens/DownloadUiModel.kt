@@ -63,6 +63,30 @@ object DownloadUiModel {
         return active.sumOf { it.progress.toDouble() }.toFloat() / active.size
     }
 
+    /** 下载管理页单一滚动列表的 item key，标题区和任务必须在同一 LazyColumn。 */
+    fun scrollItemKeys(
+        view: DownloadView,
+        activeTasks: List<DownloadProgress>,
+        completedTasks: List<DownloadProgress>,
+    ): List<Any> {
+        val tasks = if (view == DownloadView.ACTIVE) activeTasks else completedTasks
+        val keys = mutableListOf<Any>("heading")
+        keys += if (view == DownloadView.ACTIVE) "summary:active" else "summary:completed"
+        if (tasks.isEmpty()) {
+            keys += "empty"
+            return keys
+        }
+        if (view == DownloadView.COMPLETED) {
+            groupByArtist(tasks).forEach { (artist, group) ->
+                keys += "artist:$artist"
+                group.forEach { keys += it.songId }
+            }
+        } else {
+            tasks.forEach { keys += it.songId }
+        }
+        return keys
+    }
+
     /** 按歌手分组已完成任务，组按最近完成时间排序 */
     fun groupByArtist(tasks: List<DownloadProgress>): List<Pair<String, List<DownloadProgress>>> = tasks
         .groupBy { it.artists.ifBlank { "未知歌手" } }
