@@ -57,11 +57,11 @@ class SearchUserFlowTest {
             Result.success(albumContent(9, "Album", listOf(detailSong))),
         )
         val viewModel = searchViewModel(repository, cookieManager)
-        viewModel.uiState.value = SearchUiState(
+        viewModel.replaceUiState(SearchUiState(
             searchQuery = "query",
             songs = parentResults.songs,
             searchResults = parentResults,
-        )
+        ))
 
         viewModel.loadAlbumFromResult(AlbumResult(id = 9, name = "Album"))
         advanceUntilIdle()
@@ -112,12 +112,12 @@ class SearchUserFlowTest {
             Result.success(playlistContent(123, "歌单", emptyList())),
         )
         val viewModel = searchViewModel(repository, cookieManager)
-        viewModel.uiState.value = SearchUiState(
+        viewModel.replaceUiState(SearchUiState(
             searchQuery = "current query",
             playlistUrl = "123",
             sourceLabel = "搜索",
             statusMessage = "搜索失败",
-        )
+        ))
 
         viewModel.retry()
         advanceUntilIdle()
@@ -144,11 +144,11 @@ class SearchUserFlowTest {
     fun `download preparation ignores repeated taps`() {
         val repository = mock(NeteaseRepository::class.java)
         val viewModel = searchViewModel(repository, loggedInCookieManager())
-        viewModel.uiState.value = SearchUiState(
+        viewModel.replaceUiState(SearchUiState(
             songs = listOf(song(1, "Song")),
             selectedIds = setOf(1L),
             isPreparingDownloads = true,
-        )
+        ))
 
         viewModel.downloadSelected()
 
@@ -180,7 +180,7 @@ class SearchUserFlowTest {
             ),
         )
         val viewModel = searchViewModel(repository, loggedInCookieManager())
-        viewModel.uiState.value = SearchUiState(
+        viewModel.replaceUiState(SearchUiState(
             searchQuery = "Ariana Grande",
             searchCategory = SearchCategory.ALBUMS,
             searchResults = SearchResults(
@@ -188,7 +188,7 @@ class SearchUserFlowTest {
                 hasMoreAlbums = true,
                 albumArtistId = 48161,
             ),
-        )
+        ))
 
         viewModel.loadMoreSearch()
         advanceUntilIdle()
@@ -210,12 +210,12 @@ class SearchUserFlowTest {
         `when`(repository.getPlaylistDetail(playlist.id.toString()))
             .thenReturn(Result.success(playlistContent(playlist.id, playlist.name, listOf(detailSong))))
         val viewModel = searchViewModel(repository, loggedInCookieManager())
-        viewModel.uiState.value = SearchUiState(
+        viewModel.replaceUiState(SearchUiState(
             searchQuery = "Ariana Grande",
             searchPlaylists = listOf(playlist),
             searchResults = SearchResults(playlists = listOf(playlist)),
             searchCategory = SearchCategory.PLAYLISTS,
-        )
+        ))
 
         viewModel.loadPlaylistFromResult(playlist)
         advanceUntilIdle()
@@ -247,12 +247,12 @@ class SearchUserFlowTest {
             Result.success(DiscoveryPage(items = listOf(second), nextOffset = 2, hasMore = false)),
         )
         val viewModel = searchViewModel(repository, loggedInCookieManager())
-        viewModel.uiState.value = SearchUiState(
+        viewModel.replaceUiState(SearchUiState(
             searchQuery = "Ariana Grande",
             searchPodcasts = listOf(podcast),
             searchResults = SearchResults(podcasts = listOf(podcast)),
             searchCategory = SearchCategory.PODCASTS,
-        )
+        ))
 
         viewModel.loadPodcastFromResult(podcast)
         advanceUntilIdle()

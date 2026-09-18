@@ -20,9 +20,11 @@ import com.qing.hachimi.data.local.CookieManager
 import com.qing.hachimi.data.model.AlbumResult
 import com.qing.hachimi.data.model.ArtistResult
 import com.qing.hachimi.data.model.DiscoveryPage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
@@ -63,6 +65,23 @@ class NeteaseRepositorySearchTest {
         assertEquals(50, result.albumOffset)
         assertTrue(result.hasMoreAlbums)
         verify(artistApi).getAlbumsPage(48161, cookies, 50, 0)
+        Unit
+    }
+
+    @Test
+    fun `searchAll does not swallow cancellation`() = runBlocking {
+        val searchApi = mock(SearchApi::class.java)
+        val cookies = emptyMap<String, String>()
+        `when`(searchApi.searchSongs("query", cookies, 30, 0))
+            .thenThrow(CancellationException("cancelled"))
+        val repository = repository(searchApi, mock(ArtistApi::class.java), cookies)
+
+        try {
+            repository.searchAll("query")
+            fail("expected CancellationException")
+        } catch (e: CancellationException) {
+            assertEquals("cancelled", e.message)
+        }
         Unit
     }
 
