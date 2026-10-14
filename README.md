@@ -92,7 +92,7 @@ cd Hachimi
 
 未配置签名凭据时，`assembleRelease` 生成未签名 APK。
 
-`versionName` 为 `1.0.0` 加上当前 Git 短哈希，`versionCode` 为提交总数（与 CloudX 相同）。首次正式签名后执行：
+`versionName` 为 `1.1.0` 加上当前 Git 短哈希，`versionCode` 为提交总数（与 CloudX 相同）。首次正式签名后执行：
 
 ```bash
 .\gradlew.bat :app:printReleaseCertSha256

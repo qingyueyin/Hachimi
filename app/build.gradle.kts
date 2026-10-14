@@ -8,7 +8,7 @@ plugins {
     id("kotlin-parcelize")
 }
 
-val appVersion = "1.0.0"
+val appVersion = "1.1.0"
 val gitHash = gitOutput("rev-parse", "--short", "HEAD", fallback = "unknown")
 val gitCommitCount = gitOutput("rev-list", "--count", "HEAD", fallback = "1")
     .toIntOrNull()?.coerceAtLeast(1) ?: 1

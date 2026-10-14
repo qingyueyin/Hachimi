@@ -12,7 +12,7 @@ Issue 和 PR 里不要粘贴 Cookie、`MUSIC_U`、完整日志或密钥库密码
 
 ## 版本号
 
-`versionName` 为 `1.0.0-<git 短哈希>`，`versionCode` 为 `git rev-list --count HEAD`。不要在 `build.gradle.kts` 里手写死这两个值。
+`versionName` 为 `1.1.0-<git 短哈希>`，`versionCode` 为 `git rev-list --count HEAD`。不要在 `build.gradle.kts` 里手写死这两个值。
 
 首次打出带签名的 Release 后，运行 `:app:printReleaseCertSha256`，把 SHA-256 配到 `HACHIMI_CERT_SHA256`，官方包才会显示「官方」。
 
