@@ -212,7 +212,7 @@ fun CoverPreviewDialog(
         var scale by remember { mutableFloatStateOf(1f) }
         var offset by remember { mutableStateOf(Offset.Zero) }
         val scope = rememberCoroutineScope()
-        val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
+        val transformableState = rememberTransformableState { _, zoomChange, panChange, _ ->
             val newScale = (scale * zoomChange).coerceIn(1f, 5f)
             scale = newScale
             if (newScale > 1f) {
