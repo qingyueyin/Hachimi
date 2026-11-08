@@ -3,6 +3,7 @@ package com.qing.hachimi.ui.screens
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.qing.hachimi.data.local.FloatingBarEffect
 
 internal val FloatingNavigationBarHeight = 64.dp
 internal val FloatingNavigationBarBottomMargin = 16.dp
@@ -16,18 +17,18 @@ internal enum class FloatingBarStyle {
     SOLID,
 }
 
-internal fun shouldCaptureFloatingBackdrop(
+internal fun shouldCaptureBarBackdrop(
     blurEnabled: Boolean,
-    liquidGlassEnabled: Boolean,
-): Boolean = blurEnabled || liquidGlassEnabled
+    effect: FloatingBarEffect,
+): Boolean = blurEnabled || effect == FloatingBarEffect.LIQUID_GLASS
 
 internal fun resolveFloatingBarStyle(
-    liquidGlassEnabled: Boolean,
+    effect: FloatingBarEffect,
     blurEnabled: Boolean,
     hasBackdrop: Boolean,
 ): FloatingBarStyle = when {
-    liquidGlassEnabled && hasBackdrop -> FloatingBarStyle.LIQUID
-    blurEnabled -> FloatingBarStyle.HACHIMI_BLUR
+    effect == FloatingBarEffect.LIQUID_GLASS && hasBackdrop -> FloatingBarStyle.LIQUID
+    effect == FloatingBarEffect.FROSTED_GLASS && blurEnabled -> FloatingBarStyle.HACHIMI_BLUR
     else -> FloatingBarStyle.SOLID
 }
 

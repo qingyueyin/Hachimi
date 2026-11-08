@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastCoerceIn
 import androidx.compose.ui.util.fastRoundToInt
 import androidx.compose.ui.util.lerp
+import com.qing.hachimi.data.local.FloatingBarEffect
 import com.qing.hachimi.ui.animation.DampedDragAnimation
 import com.qing.hachimi.ui.animation.rememberIsReduceMotionEnabled
 import com.qing.hachimi.ui.liquid.InnerShadow
@@ -119,13 +120,13 @@ fun BlurNavigationBar(
     itemCount: Int,
     onSelectedIndexChange: (Int) -> Unit,
     isBlurEnabled: Boolean = true,
-    isLiquidGlassEnabled: Boolean = false,
+    effect: FloatingBarEffect = FloatingBarEffect.FROSTED_GLASS,
     content: @Composable RowScope.() -> Unit,
 ) {
     if (itemCount <= 0) return
     when (
         resolveFloatingBarStyle(
-            liquidGlassEnabled = isLiquidGlassEnabled,
+            effect = effect,
             blurEnabled = isBlurEnabled,
             hasBackdrop = backdrop != null,
         )
@@ -138,11 +139,17 @@ fun BlurNavigationBar(
             onSelectionChanged = onSelectedIndexChange,
             content = content,
         )
-        FloatingBarStyle.HACHIMI_BLUR,
-        FloatingBarStyle.SOLID,
-        -> HachimiBlurBar(
+        FloatingBarStyle.HACHIMI_BLUR -> HachimiBlurBar(
             modifier = modifier,
             backdrop = backdrop,
+            selectedIndex = selectedIndex,
+            itemCount = itemCount,
+            content = content,
+        )
+        // 选「无」时不传 backdrop，HachimiBlurBar 就只画实色底
+        FloatingBarStyle.SOLID -> HachimiBlurBar(
+            modifier = modifier,
+            backdrop = null,
             selectedIndex = selectedIndex,
             itemCount = itemCount,
             content = content,

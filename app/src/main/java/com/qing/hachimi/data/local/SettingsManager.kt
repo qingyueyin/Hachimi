@@ -21,6 +21,19 @@ enum class FolderNamingFormat(val label: String) {
     ARTIST_ALBUM("歌手 - 专辑"),
 }
 
+/** 悬浮底栏的视觉效果。毛玻璃和液态玻璃互斥，所以用三选一菜单而不是两个开关。 */
+enum class FloatingBarEffect(val label: String) {
+    NONE("无"),
+    FROSTED_GLASS("毛玻璃"),
+    LIQUID_GLASS("液态玻璃");
+
+    companion object {
+        /** 宽松解析已保存的枚举名，未知值回退到 [FROSTED_GLASS]。 */
+        fun fromName(name: String?): FloatingBarEffect =
+            entries.firstOrNull { it.name == name } ?: FROSTED_GLASS
+    }
+}
+
 class SettingsManager(context: Context) {
 
     private val prefs: SharedPreferences =
@@ -183,9 +196,18 @@ class SettingsManager(context: Context) {
         get() = prefs.getBoolean("blur_effect", true)
         set(value) = prefs.edit { putBoolean("blur_effect", value) }
 
-    var liquidGlass: Boolean
-        get() = prefs.getBoolean("liquid_glass", false)
-        set(value) = prefs.edit { putBoolean("liquid_glass", value) }
+    var floatingBarEffect: FloatingBarEffect
+        get() {
+            val stored = prefs.getString("floating_bar_effect", null)
+            if (stored != null) return FloatingBarEffect.fromName(stored)
+            // 旧版只有 liquid_glass 开关，第一次读取时迁移过来
+            return if (prefs.getBoolean("liquid_glass", false)) {
+                FloatingBarEffect.LIQUID_GLASS
+            } else {
+                FloatingBarEffect.FROSTED_GLASS
+            }
+        }
+        set(value) = prefs.edit { putString("floating_bar_effect", value.name) }
 
     var floatingNavigationBar: Boolean
         get() = prefs.getBoolean("floating_navigation_bar", true)

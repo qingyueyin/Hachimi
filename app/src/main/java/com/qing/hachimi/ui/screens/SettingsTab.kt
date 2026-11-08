@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import com.qing.hachimi.data.local.FloatingBarEffect
 import com.qing.hachimi.ui.theme.ColorMode
 import com.qing.hachimi.util.OfficialBuild
 import top.yukonga.miuix.kmp.basic.Card
@@ -477,7 +478,7 @@ fun AppearanceSettingsScreen(
     onToggleMonetTheme: () -> Unit,
     onToggleFloatingNavigationBar: () -> Unit = {},
     onToggleBlurEffect: () -> Unit = {},
-    onToggleLiquidGlass: () -> Unit = {},
+    onFloatingBarEffectChange: (FloatingBarEffect) -> Unit = {},
     onBack: () -> Unit,
     innerPadding: PaddingValues = PaddingValues(0.dp)
 ) {
@@ -555,13 +556,13 @@ fun AppearanceSettingsScreen(
                 )
 
                 SwitchPreference(
-                    title = "毛玻璃效果",
-                    summary = "悬浮导航栏和顶栏使用模糊效果",
+                    title = "模糊",
+                    summary = "顶栏和底栏使用模糊效果",
                     startAction = {
                         Icon(
                             MiuixIcons.Tune,
                             modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "毛玻璃效果",
+                            contentDescription = "模糊",
                             tint = colorScheme.onBackground
                         )
                     },
@@ -569,20 +570,27 @@ fun AppearanceSettingsScreen(
                     onCheckedChange = { onToggleBlurEffect() }
                 )
 
-                SwitchPreference(
-                    title = "液态玻璃",
-                    summary = "为悬浮导航栏增加折射效果",
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Tune,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "液态玻璃",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    checked = uiState.liquidGlass,
-                    onCheckedChange = { onToggleLiquidGlass() }
-                )
+                // 悬浮栏的三种效果互斥，用三选一菜单
+                if (uiState.floatingNavigationBar) {
+                    OverlayDropdownPreference(
+                        title = "悬浮栏效果",
+                        summary = "悬浮底栏的视觉样式",
+                        items = FloatingBarEffect.entries.map { it.label },
+                        selectedIndex = FloatingBarEffect.entries.indexOf(uiState.floatingBarEffect)
+                            .coerceAtLeast(0),
+                        startAction = {
+                            Icon(
+                                MiuixIcons.Tune,
+                                modifier = Modifier.padding(end = 6.dp),
+                                contentDescription = "悬浮栏效果",
+                                tint = colorScheme.onBackground
+                            )
+                        },
+                        onSelectedIndexChange = { index ->
+                            onFloatingBarEffectChange(FloatingBarEffect.entries[index])
+                        }
+                    )
+                }
             }
         }
 

@@ -8,6 +8,7 @@ import com.qing.hachimi.data.local.AccountHistory
 import com.qing.hachimi.data.local.AccountHistoryManager
 import com.qing.hachimi.data.local.CookieManager
 import com.qing.hachimi.data.local.DiscoveryCacheManager
+import com.qing.hachimi.data.local.FloatingBarEffect
 import com.qing.hachimi.data.local.FolderNamingFormat
 import com.qing.hachimi.data.local.NamingFormat
 import com.qing.hachimi.data.local.SettingsManager
@@ -45,7 +46,7 @@ data class MainUiState(
     val qualityPickerOptions: List<String> = emptyList(),
     val colorMode: Int = 5,
     val blurEffect: Boolean = true,
-    val liquidGlass: Boolean = false,
+    val floatingBarEffect: FloatingBarEffect = FloatingBarEffect.FROSTED_GLASS,
     val floatingNavigationBar: Boolean = true,
     val searchTabRequestId: Long = 0L,
     val scrollToTopTrigger: Int = 0,
@@ -102,7 +103,7 @@ class MainViewModel(
             qualityPickerOptions = settingsManager.getFilteredQualityKeys(),
             colorMode = settingsManager.themeColorMode,
             blurEffect = settingsManager.blurEffect,
-            liquidGlass = settingsManager.liquidGlass,
+            floatingBarEffect = settingsManager.floatingBarEffect,
             floatingNavigationBar = settingsManager.floatingNavigationBar
         )
         // Initialize anonymous token at startup (ensures MUSIC_A is available for non-logged-in users)
@@ -292,10 +293,9 @@ class MainViewModel(
         _uiState.value = _uiState.value.copy(blurEffect = newValue)
     }
 
-    fun toggleLiquidGlass() {
-        val newValue = !_uiState.value.liquidGlass
-        settingsManager.liquidGlass = newValue
-        _uiState.value = _uiState.value.copy(liquidGlass = newValue)
+    fun setFloatingBarEffect(effect: FloatingBarEffect) {
+        settingsManager.floatingBarEffect = effect
+        _uiState.value = _uiState.value.copy(floatingBarEffect = effect)
     }
 
     fun toggleFloatingNavigationBar() {

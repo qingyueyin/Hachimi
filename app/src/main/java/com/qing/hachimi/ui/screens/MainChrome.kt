@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.qing.hachimi.data.local.FloatingBarEffect
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurDefaults
@@ -62,7 +63,7 @@ internal fun MainBottomBar(
     isLoggedIn: Boolean,
     backdrop: top.yukonga.miuix.kmp.blur.LayerBackdrop?,
     isBlurEnabled: Boolean,
-    isLiquidGlassEnabled: Boolean,
+    effect: FloatingBarEffect,
     onTabChange: (Tab) -> Unit,
 ) {
     val visibleTabs = visibleMainTabs(isLoggedIn)
@@ -73,7 +74,7 @@ internal fun MainBottomBar(
         selectedIndex = selectedTabIndex,
         itemCount = visibleTabs.size,
         isBlurEnabled = isBlurEnabled,
-        isLiquidGlassEnabled = isLiquidGlassEnabled,
+        effect = effect,
         onSelectedIndexChange = { index ->
             visibleTabs.getOrNull(index)?.let(onTabChange)
         },

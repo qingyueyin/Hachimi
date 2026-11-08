@@ -31,6 +31,7 @@ import android.content.Intent
 import android.os.SystemClock
 import android.widget.Toast
 import com.qing.hachimi.activity.NeteaseWebLoginActivity
+import com.qing.hachimi.data.local.FloatingBarEffect
 import com.qing.hachimi.data.local.SettingsManager
 import com.qing.hachimi.data.model.SourceMode
 import com.qing.hachimi.downloader.DownloadProgress
@@ -123,7 +124,9 @@ fun MainScreen(
     // 侧边导航栏：够宽或横屏大尺寸时启用（参考 SukiSU），展开状态跟随设置保存。
     // 用户开启了悬浮底栏特效（毛玻璃/液态玻璃）时，优先保留底部悬浮栏，不换成侧边栏。
     val railScreen = rememberIsNavigationRailScreen()
-    val useRail = railScreen && !uiState.blurEffect && !uiState.liquidGlass
+    val floatingBarGlass = uiState.floatingBarEffect == FloatingBarEffect.LIQUID_GLASS ||
+        (uiState.floatingBarEffect == FloatingBarEffect.FROSTED_GLASS && uiState.blurEffect)
+    val useRail = railScreen && !floatingBarGlass
     // 宽屏布局与侧边栏是两件事：开了玻璃特效仍然算宽屏，只是底栏不换成侧边栏
     val isWideLayout = railScreen
     // 设置页改用导航栈：二级页是栈上的一层，返回由 NavDisplay 处理
@@ -374,7 +377,7 @@ fun MainScreen(
     }
 
     val backdrop = rememberBlurBackdrop(
-        enableBlur = shouldCaptureFloatingBackdrop(uiState.blurEffect, uiState.liquidGlass),
+        enableBlur = shouldCaptureBarBackdrop(uiState.blurEffect, uiState.floatingBarEffect),
     )
 
     val performContextBack: () -> Unit = {
@@ -569,7 +572,6 @@ fun MainScreen(
                     onCloseAccountSettings = performContextBack,
                     onCloseAboutSettings = performContextBack,
                     onToggleBlurEffect = viewModel::toggleBlurEffect,
-                    onToggleLiquidGlass = viewModel::toggleLiquidGlass,
                     onImportClick = { showImportDialog = true },
                     onOpenStoragePermissionSettings = openStoragePermissionSettings,
                     sessionStartedAt = downloadSessionStartedAt,
@@ -591,7 +593,7 @@ fun MainScreen(
                     isLoggedIn = uiState.isLoggedIn,
                     backdrop = backdrop,
                     isBlurEnabled = uiState.blurEffect,
-                    isLiquidGlassEnabled = uiState.liquidGlass,
+                    effect = uiState.floatingBarEffect,
                     onTabChange = onTabClick,
                 )
             } else {
@@ -907,7 +909,6 @@ private fun TabContent(
     onCloseAccountSettings: () -> Unit,
     onCloseAboutSettings: () -> Unit = {},
     onToggleBlurEffect: () -> Unit = {},
-    onToggleLiquidGlass: () -> Unit = {},
     onImportClick: () -> Unit,
     onOpenStoragePermissionSettings: () -> Unit = {},
     sessionStartedAt: Long = 0L,
@@ -1094,7 +1095,6 @@ private fun TabContent(
                     onCloseAccountSettings = onCloseAccountSettings,
                     onCloseAboutSettings = onCloseAboutSettings,
                     onToggleBlurEffect = onToggleBlurEffect,
-                    onToggleLiquidGlass = onToggleLiquidGlass,
                     onExportCookies = onExportCookies,
                     onImportClick = onImportClick,
                     onOpenStoragePermissionSettings = onOpenStoragePermissionSettings,

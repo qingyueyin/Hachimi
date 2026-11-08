@@ -54,7 +54,6 @@ internal fun SettingsNavHost(
     onCloseAccountSettings: () -> Unit,
     onCloseAboutSettings: () -> Unit,
     onToggleBlurEffect: () -> Unit,
-    onToggleLiquidGlass: () -> Unit,
     onExportCookies: () -> Unit,
     onImportClick: () -> Unit,
     onOpenStoragePermissionSettings: () -> Unit,
@@ -108,7 +107,7 @@ internal fun SettingsNavHost(
                     onToggleMonetTheme = viewModel::toggleMonetTheme,
                     onToggleFloatingNavigationBar = viewModel::toggleFloatingNavigationBar,
                     onToggleBlurEffect = onToggleBlurEffect,
-                    onToggleLiquidGlass = onToggleLiquidGlass,
+                    onFloatingBarEffectChange = viewModel::setFloatingBarEffect,
                     onBack = onCloseAppearanceSettings,
                     innerPadding = contextPadding
                 )

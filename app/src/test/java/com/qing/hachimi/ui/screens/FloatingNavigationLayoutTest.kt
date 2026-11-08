@@ -1,6 +1,7 @@
 package com.qing.hachimi.ui.screens
 
 import androidx.compose.ui.unit.dp
+import com.qing.hachimi.data.local.FloatingBarEffect
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -25,10 +26,20 @@ class FloatingNavigationLayoutTest {
 
     @Test
     fun `backdrop is captured when blur or liquid glass is on`() {
-        assertTrue(shouldCaptureFloatingBackdrop(blurEnabled = true, liquidGlassEnabled = false))
-        assertTrue(shouldCaptureFloatingBackdrop(blurEnabled = false, liquidGlassEnabled = true))
-        assertTrue(shouldCaptureFloatingBackdrop(blurEnabled = true, liquidGlassEnabled = true))
-        assertFalse(shouldCaptureFloatingBackdrop(blurEnabled = false, liquidGlassEnabled = false))
+        assertTrue(shouldCaptureBarBackdrop(blurEnabled = true, effect = FloatingBarEffect.NONE))
+        assertTrue(
+            shouldCaptureBarBackdrop(
+                blurEnabled = false,
+                effect = FloatingBarEffect.LIQUID_GLASS,
+            ),
+        )
+        assertTrue(
+            shouldCaptureBarBackdrop(
+                blurEnabled = true,
+                effect = FloatingBarEffect.FROSTED_GLASS,
+            ),
+        )
+        assertFalse(shouldCaptureBarBackdrop(blurEnabled = false, effect = FloatingBarEffect.NONE))
     }
 
     @Test
@@ -36,7 +47,7 @@ class FloatingNavigationLayoutTest {
         assertEquals(
             FloatingBarStyle.LIQUID,
             resolveFloatingBarStyle(
-                liquidGlassEnabled = true,
+                effect = FloatingBarEffect.LIQUID_GLASS,
                 blurEnabled = true,
                 hasBackdrop = true,
             ),
@@ -44,11 +55,11 @@ class FloatingNavigationLayoutTest {
     }
 
     @Test
-    fun `hachimi blur is used when liquid glass is off`() {
+    fun `hachimi blur is used for the frosted style`() {
         assertEquals(
             FloatingBarStyle.HACHIMI_BLUR,
             resolveFloatingBarStyle(
-                liquidGlassEnabled = false,
+                effect = FloatingBarEffect.FROSTED_GLASS,
                 blurEnabled = true,
                 hasBackdrop = true,
             ),
@@ -60,7 +71,7 @@ class FloatingNavigationLayoutTest {
         assertEquals(
             FloatingBarStyle.SOLID,
             resolveFloatingBarStyle(
-                liquidGlassEnabled = true,
+                effect = FloatingBarEffect.LIQUID_GLASS,
                 blurEnabled = false,
                 hasBackdrop = false,
             ),
@@ -68,9 +79,9 @@ class FloatingNavigationLayoutTest {
         assertEquals(
             FloatingBarStyle.SOLID,
             resolveFloatingBarStyle(
-                liquidGlassEnabled = false,
-                blurEnabled = false,
-                hasBackdrop = false,
+                effect = FloatingBarEffect.NONE,
+                blurEnabled = true,
+                hasBackdrop = true,
             ),
         )
     }
