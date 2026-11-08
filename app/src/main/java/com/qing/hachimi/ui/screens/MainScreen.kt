@@ -75,6 +75,10 @@ import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.window.WindowDialog
+import top.yukonga.miuix.kmp.basic.NavigationRail
+import top.yukonga.miuix.kmp.basic.NavigationRailItem
+import top.yukonga.miuix.kmp.basic.NavigationRailState
+import top.yukonga.miuix.kmp.basic.rememberNavigationRailState
 
 import androidx.compose.ui.graphics.vector.ImageVector
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -140,6 +144,9 @@ fun MainScreen(
     var accountHistoryVersion by remember { mutableIntStateOf(0) }
     var skipTabTransition by remember { mutableStateOf(false) }
     var skipSettingsTransition by remember { mutableStateOf(false) }
+    // 平板/宽屏：左侧导航栏替代底部悬浮条（断点与 Miuix 对话框大屏逻辑一致）
+    val isWide = rememberIsWideScreen()
+    val railState = rememberNavigationRailState()
     val scope = rememberCoroutineScope()
     LaunchedEffect(skipTabTransition) {
         if (skipTabTransition) {
@@ -339,7 +346,7 @@ fun MainScreen(
 
     val mainBottomContentPadding = floatingContentBottomPadding(
         systemBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
-        hasFloatingBar = true,
+        hasFloatingBar = !isWide,
     )
 
     val backdrop = rememberBlurBackdrop(
@@ -446,8 +453,19 @@ fun MainScreen(
         },
     )
 
+    Row(modifier = Modifier.fillMaxSize()) {
+        if (isWide) {
+            MainNavigationRail(
+                currentTab = currentTab,
+                isLoggedIn = uiState.isLoggedIn,
+                railState = railState,
+                onTabChange = onTabClick,
+            )
+        }
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
     ) {
         // Background preview: shows target page during predictive back gesture
         if (backProgress > 0f && lastContextBackTarget != null) {
@@ -537,7 +555,8 @@ fun MainScreen(
                     CompositionLocalProvider(
                         LocalMainBottomContentPadding provides mainBottomContentPadding,
                     ) {
-                        TabContent(
+                        WidthLimiter {
+                            TabContent(
                     currentTab = currentTab,
                     uiState = uiState,
                     discoverViewModel = discoverViewModel,
@@ -603,6 +622,7 @@ fun MainScreen(
                     sessionStartedAt = downloadSessionStartedAt,
                     topChromeScrollOffset = topChromeScrollOffset,
                         )
+                        }
                     }
                 }
 
@@ -639,16 +659,19 @@ fun MainScreen(
         }
         }
 
-        // 底部操作区（Bottom bar），置于前景之外，实时模糊始终正确
-        MainBottomBar(
-            modifier = Modifier.align(Alignment.BottomCenter),
-            currentTab = currentTab,
-            isLoggedIn = uiState.isLoggedIn,
-            backdrop = backdrop,
-            isBlurEnabled = uiState.blurEffect,
-            isLiquidGlassEnabled = uiState.liquidGlass,
-            onTabChange = onTabClick,
-        )
+        // 底部操作区（Bottom bar），置于前景之外，实时模糊始终正确；宽屏由左侧导航栏接管
+        if (!isWide) {
+            MainBottomBar(
+                modifier = Modifier.align(Alignment.BottomCenter),
+                currentTab = currentTab,
+                isLoggedIn = uiState.isLoggedIn,
+                backdrop = backdrop,
+                isBlurEnabled = uiState.blurEffect,
+                isLiquidGlassEnabled = uiState.liquidGlass,
+                onTabChange = onTabClick,
+            )
+        }
+    }
     }
 
         // Dialogs live outside Scaffold, so use window dialogs instead of Scaffold-hosted overlays.
@@ -1147,6 +1170,31 @@ fun MainScreen(
     }
 }
 
+
+@Composable
+private fun MainNavigationRail(
+    currentTab: Tab,
+    isLoggedIn: Boolean,
+    railState: NavigationRailState,
+    onTabChange: (Tab) -> Unit,
+) {
+    val visibleTabs = visibleMainTabs(isLoggedIn)
+    NavigationRail(
+        state = railState,
+        color = colorScheme.surface,
+        expandContentDescription = "展开导航栏",
+        collapseContentDescription = "收起导航栏",
+    ) {
+        visibleTabs.forEach { tab ->
+            NavigationRailItem(
+                selected = tab == currentTab,
+                onClick = { onTabChange(tab) },
+                icon = tab.icon,
+                label = tab.label,
+            )
+        }
+    }
+}
 
 @Composable
 private fun MainBottomBar(

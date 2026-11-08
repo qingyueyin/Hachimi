@@ -35,6 +35,7 @@ val releaseSigningReady = releaseKeystore.exists() &&
 android {
     namespace = "com.qing.hachimi"
     compileSdk = 37
+    compileSdkMinor = 0
 
     signingConfigs {
         if (releaseSigningReady) {
