@@ -230,6 +230,36 @@ class SearchUserFlowTest {
     }
 
     @Test
+    fun `clearing search query drops stale suggestions`() = runTest(dispatcher) {
+        val repository = mock(NeteaseRepository::class.java)
+        val viewModel = searchViewModel(repository, loggedInCookieManager())
+        viewModel.replaceUiState(
+            SearchUiState(
+                searchQuery = "周杰伦",
+                suggestions = listOf(
+                    com.qing.hachimi.data.model.SearchSuggestion(keyword = "周杰伦", category = SearchCategory.SONGS)
+                ),
+                suggestionsVisible = true,
+                isLoadingSuggestions = true,
+            )
+        )
+
+        viewModel.updateSearchQuery("")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(emptyList<Any>(), state.suggestions)
+        assertEquals(false, state.suggestionsVisible)
+        assertEquals(false, state.isLoadingSuggestions)
+        // 输入框清空后不该再拿旧词去请求联想
+        verifyNoInteractions(repository)
+    }
+
+    private fun loggedInCookieManager() = mock(CookieManager::class.java).also {
+        `when`(it.isLoggedIn()).thenReturn(true)
+    }
+
+    @Test
     fun `podcast detail keeps paging within the selected channel`() = runTest(dispatcher) {
         val repository = mock(NeteaseRepository::class.java)
         val podcast = PodcastChannel(
@@ -262,10 +292,6 @@ class SearchUserFlowTest {
         assertEquals(listOf(1L, 2L), viewModel.uiState.value.songs.map { it.id })
         assertEquals(false, viewModel.uiState.value.detailHasMore)
         verify(repository).getPodcastPrograms(podcast, 50, 1)
-    }
-
-    private fun loggedInCookieManager() = mock(CookieManager::class.java).also {
-        `when`(it.isLoggedIn()).thenReturn(true)
     }
 
     private fun searchViewModel(repository: NeteaseRepository, cookieManager: CookieManager) =

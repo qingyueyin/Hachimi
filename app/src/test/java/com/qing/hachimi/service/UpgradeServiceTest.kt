@@ -180,6 +180,43 @@ class UpgradeServiceTest {
     }
 
     @Test
+    fun `failed upgrade leaves no temp folder behind`() = runBlocking {
+        val api = mock(UpgradeApi::class.java)
+        val history = mock(UpgradeHistoryManager::class.java)
+        val engine = mock(DownloadEngine::class.java)
+        val folder = Files.createTempDirectory("hachimi-upgrade-temp").toFile()
+        val original = File(folder, "Song - Artist.flac").apply { writeText("original") }
+        val cookies = mapOf("MUSIC_U" to "token")
+        val online = OnlineVersion(
+            id = 43,
+            name = "Song",
+            artists = "Artist",
+            album = "Album",
+            qualityLevel = "lossless",
+            qualityInfo = quality("flac", 1_000),
+            downloadUrl = null
+        )
+        `when`(api.getSongUrl(online.id, online.qualityLevel, cookies)).thenReturn("https://example.test/song.flac")
+        `when`(engine.getStatus(anyLong())).thenReturn(DownloadStatus.FAILED)
+
+        try {
+            val service = UpgradeService(mock(), api, history, engine)
+            val result = service.upgradeSong(
+                SongInfo(0, "Song", "Artist", "Album", original, quality("mp3", 320)),
+                online,
+                UpgradeMode.AUTO_REPLACE,
+                cookies
+            )
+
+            assertFalse(result.success)
+            assertFalse("升级失败后不该留下临时目录", File(folder, "upgrade_temp").exists())
+            assertTrue(original.exists())
+        } finally {
+            folder.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `auto replace rejects a downloaded file that is not higher quality`() = runBlocking {
         val api = mock(UpgradeApi::class.java)
         val analyzer = mock(AudioQualityAnalyzer::class.java)

@@ -109,7 +109,7 @@ class SearchViewModel(
         suggestionJob?.cancel()
         val trimmed = q.trim()
         if (trimmed.length < 1 || uiState.value.isSearching || uiState.value.isDetailView) {
-            _uiState.value = uiState.value.copy(suggestions = emptyList(), suggestionsVisible = false)
+            _uiState.value = uiState.value.copy(suggestions = emptyList(), suggestionsVisible = false, isLoadingSuggestions = false)
             return
         }
         suggestionCache[trimmed]?.let { cached ->

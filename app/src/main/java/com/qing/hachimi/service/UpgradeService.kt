@@ -38,9 +38,13 @@ class UpgradeService(
         private const val DOWNLOAD_POLL_INTERVAL_MS = 100L
         private const val SEARCH_TIMEOUT_MS = 15_000L
         private const val MAX_CONCURRENT_SEARCHES = 3
+        private val AUDIO_FORMATS = setOf("mp3", "flac", "wav", "aac", "ogg", "opus", "m4a", "wma", "ape", "wv")
     }
 
     private val searchCache = ConcurrentHashMap<String, List<OnlineVersion>>()
+
+    /** 本次创建过的临时目录；中途取消/异常时下面没有执行 tempDir.delete()，在这里统一清掉 */
+    private val seenTempDirs: MutableSet<File> = java.util.Collections.synchronizedSet(mutableSetOf())
 
     suspend fun scanFolders(
         folders: List<File>,
@@ -186,7 +190,13 @@ class UpgradeService(
             if (!tempDir.exists() && !tempDir.mkdirs()) {
                 throw IllegalStateException("无法创建升级临时目录")
             }
-
+            seenTempDirs.add(tempDir)
+            // 音频格式已知，直接按它命名：CDN 链接没有扩展名时，按链接猜会被存成 .mp3，后面的音质检测就失效了
+            val expectedFormat = downloadUrl.substringBefore('?')
+                .substringAfterLast('/')
+                .substringAfterLast('.')
+                .lowercase()
+                .takeIf { it in AUDIO_FORMATS }
             downloadEngine.startDownload(
                 songId = downloadTaskId,
                 name = song.name,
@@ -197,7 +207,8 @@ class UpgradeService(
                 qualityLabel = targetVersion.qualityLevel,
                 overwrite = true,
                 applyFolderGrouping = false,
-                persistHistory = false
+                persistHistory = false,
+                expectedFormat = expectedFormat,
             )
 
             val downloadedFile = awaitDownloadedFile(downloadTaskId)
@@ -258,12 +269,15 @@ class UpgradeService(
 
             downloadEngine.forgetTask(downloadTaskId)
             tempDir.delete()
+            seenTempDirs.remove(tempDir)
             result
         } catch (e: CancellationException) {
             downloadEngine.removeTask(downloadTaskId)
+            cleanTempDirQuietly(song)
             throw e
         } catch (e: Exception) {
             downloadEngine.removeTask(downloadTaskId)
+            cleanTempDirQuietly(song)
             AppLogger.error("升级失败: ${song.name}", e)
             UpgradeResult(
                 success = false,
@@ -271,6 +285,17 @@ class UpgradeService(
                 originalFile = song.localFile,
                 upgradedFile = null
             )
+        }
+    }
+
+    /** 升级中断时清掉临时目录；只在本次确实创建过、且目录已经没有别的文件时才删 */
+    private fun cleanTempDirQuietly(song: SongInfo) {
+        val tempDir = File(song.localFile.parentFile, "upgrade_temp")
+        if (!seenTempDirs.remove(tempDir)) return
+        try {
+            tempDir.deleteRecursively()
+        } catch (e: Exception) {
+            AppLogger.error("清理升级临时目录失败", e)
         }
     }
 
