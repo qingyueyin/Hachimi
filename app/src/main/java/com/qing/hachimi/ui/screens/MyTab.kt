@@ -758,7 +758,7 @@ private fun LikedSongsList(
                     pagination = {
                         ListPageNavigator(
                             currentPage = currentPage,
-                            itemCount = pagedSongs.size,
+                            itemCount = state.likedSongs.size,
                             onPageChange = { currentPage = it },
                             stateKey = "liked",
                         )
@@ -865,7 +865,7 @@ private fun CloudSongsList(
             pagination = {
                 ListPageNavigator(
                     currentPage = cloudPage,
-                    itemCount = pagedCloudSongs.size,
+                    itemCount = filteredCloudSongs.size,
                     onPageChange = { cloudPage = it },
                     stateKey = state.cloudSearchQuery,
                     hasMore = state.cloudHasMore,
@@ -993,7 +993,7 @@ private fun RecordSongsList(
                     pagination = {
                         ListPageNavigator(
                             currentPage = page,
-                            itemCount = pagedEntries.size,
+                            itemCount = entries.size,
                             onPageChange = { page = it },
                             stateKey = stateKey,
                         )
@@ -1504,7 +1504,7 @@ private fun PlaylistDetailPage(
                     pagination = {
                         ListPageNavigator(
                             currentPage = playlistPage,
-                            itemCount = pagedPlaylistSongs.size,
+                            itemCount = state.songs.size,
                             onPageChange = { playlistPage = it },
                             stateKey = state.playlistName,
                         )

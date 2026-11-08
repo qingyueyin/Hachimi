@@ -1,5 +1,6 @@
 package com.qing.hachimi.data.api
 
+import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Response
@@ -13,7 +14,7 @@ class PlaylistApiTest {
     fun `playlist detail keeps creator description play count and tags`() {
         val api = PlaylistApi(neteaseApi(PLAYLIST_RESPONSE))
 
-        val detail = requireNotNull(api.getDetail("123", emptyMap()))
+        val detail = requireNotNull(runBlocking { api.getDetail("123", emptyMap()) })
 
         assertEquals("创建者", detail.creator)
         assertEquals("歌单简介", detail.description)

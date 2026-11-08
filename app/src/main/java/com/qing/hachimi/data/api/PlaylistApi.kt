@@ -1,6 +1,10 @@
 package com.qing.hachimi.data.api
 
 import com.qing.hachimi.util.AppLogger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -29,7 +33,7 @@ class PlaylistApi(private val api: NeteaseApi) {
         val duration: Long = 0
     )
 
-    fun getDetail(id: String, cookies: Map<String, String>): PlaylistInfo? {
+    suspend fun getDetail(id: String, cookies: Map<String, String>): PlaylistInfo? {
         return try {
             val raw = api.eapiPost(
                 "v6/playlist/detail",
@@ -42,12 +46,21 @@ class PlaylistApi(private val api: NeteaseApi) {
 
             val pl = obj.optJSONObject("playlist") ?: return null
             val trackIds = pl.optJSONArray("trackIds") ?: JSONArray()
-            val allIds = (0 until trackIds.length()).map { trackIds.getJSONObject(it).getLong("id") }
+            val allIds = (0 until trackIds.length()).mapNotNull { index ->
+                trackIds.optJSONObject(index)?.optLong("id")?.takeIf { it > 0L }
+            }
 
-            val songs = if (pl.has("tracks")) {
-                parseTracks(pl.getJSONArray("tracks"), allIds, cookies)
+            // v6/playlist/detail 的 tracks 最多只返回前 1000 首，后面的要按 trackIds 补
+            val tracks = if (pl.has("tracks")) pl.optJSONArray("tracks") else null
+            val parsed = if (tracks != null) parseTracks(tracks, cookies) else emptyList()
+            val byId = parsed.associateBy { it.id }
+            val missingIds = allIds.filterNot { byId.containsKey(it) }
+            val fetched = if (missingIds.isEmpty()) emptyList() else fetchSongsByIds(missingIds, cookies)
+            val allById = byId + fetched.associateBy { it.id }
+            val songs = if (allIds.isEmpty()) {
+                (parsed + fetched).distinctBy { it.id }
             } else {
-                fetchSongsByIds(allIds, cookies)
+                allIds.mapNotNull { allById[it] }
             }
 
             PlaylistInfo(
@@ -72,7 +85,7 @@ class PlaylistApi(private val api: NeteaseApi) {
         }
     }
 
-    private fun parseTracks(arr: JSONArray, allIds: List<Long>, cookies: Map<String, String>): List<SongInfo> {
+    private suspend fun parseTracks(arr: JSONArray, cookies: Map<String, String>): List<SongInfo> {
         return try {
             val tracks = (0 until arr.length()).map { arr.getJSONObject(it) }
             val fetched = tracks.any { it.has("al") }
@@ -87,27 +100,33 @@ class PlaylistApi(private val api: NeteaseApi) {
         }
     }
 
-    private fun fetchSongsByIds(ids: List<Long>, cookies: Map<String, String>): List<SongInfo> {
-        val result = mutableListOf<SongInfo>()
-        ids.chunked(100).forEach { batch ->
-            try {
-                val cArr = JSONArray(batch.map { JSONObject(mapOf("id" to it, "v" to 0)) })
-                val raw = api.eapiPost(
-                    "v3/song/detail",
-                    "{\"c\":${cArr.toString()}}",
-                    cookies,
-                    callTimeoutMs = 15_000L,
-                )
-                val obj = JSONObject(raw)
-                val songs = obj.optJSONArray("songs") ?: return@forEach
-                for (i in 0 until songs.length()) {
-                    result.add(toSongInfo(songs.getJSONObject(i)))
-                }
-            } catch (e: Exception) {
-                // Skip this batch
-            }
+    private suspend fun fetchSongsByIds(ids: List<Long>, cookies: Map<String, String>): List<SongInfo> {
+        if (ids.isEmpty()) return emptyList()
+        val fetched = coroutineScope {
+            ids.chunked(300)
+                .map { batch -> async(Dispatchers.IO) { fetchSongsBatch(batch, cookies) } }
+                .awaitAll()
+                .flatten()
         }
-        return result
+        val byId = fetched.associateBy { it.id }
+        return ids.mapNotNull { byId[it] }
+    }
+
+    private fun fetchSongsBatch(batch: List<Long>, cookies: Map<String, String>): List<SongInfo> {
+        return try {
+            val cArr = JSONArray(batch.map { JSONObject(mapOf("id" to it, "v" to 0)) })
+            val raw = api.eapiPost(
+                "v3/song/detail",
+                "{\"c\":${cArr.toString()}}",
+                cookies,
+                callTimeoutMs = 15_000L,
+            )
+            val obj = JSONObject(raw)
+            val songs = obj.optJSONArray("songs") ?: return emptyList()
+            (0 until songs.length()).map { toSongInfo(songs.getJSONObject(it)) }
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     data class UserPlaylist(
@@ -153,13 +172,28 @@ class PlaylistApi(private val api: NeteaseApi) {
         }
     }
 
+    /** 拉全用户歌单（创建 + 收藏），避免只取到前 50 个 */
+    fun getAllUserPlaylists(userId: Long, cookies: Map<String, String>): List<UserPlaylist> {
+        val all = LinkedHashMap<Long, UserPlaylist>()
+        var offset = 0
+        repeat(50) {
+            val page = getUserPlaylists(userId, cookies, limit = 50, offset = offset)
+            if (page.isEmpty()) return all.values.toList()
+            page.forEach { all[it.id] = it }
+            if (page.size < 50) return all.values.toList()
+            offset += page.size
+        }
+        return all.values.toList()
+    }
+
     /**
      * 红心歌曲列表（likelist，无序）。
      * 通过 WEAPI song/like/get 获取全部红心歌曲 id，再批量拉取详情。
      */
-    fun getLikedSongs(uid: Long, cookies: Map<String, String>, limit: Int = 1000): List<SongInfo> {
+    suspend fun getLikedSongs(uid: Long, cookies: Map<String, String>): List<SongInfo> {
         return try {
-            val payload = JSONObject().put("uid", uid).put("limit", limit).put("offset", 0)
+            // 不传 limit，服务端才会返回全部红心歌曲 id
+            val payload = JSONObject().put("uid", uid)
             val raw = api.weapiPost("song/like/get", payload.toString(), cookies)
             val obj = JSONObject(raw)
             val code = obj.optLong("code")
@@ -169,14 +203,40 @@ class PlaylistApi(private val api: NeteaseApi) {
             }
             val ids = obj.optJSONArray("ids") ?: return emptyList()
             val idList = (0 until ids.length()).mapNotNull { ids.optLong(it).takeIf { it > 0L } }
-            fetchSongsByIds(idList, cookies)
+            // 部分服务端仍会把 likelist 截到 1000，红心歌单（id = 用户 id）的 trackIds 是完整的
+            val allIds = if (idList.size >= 1000) {
+                val fullIds = getPlaylistTrackIds(uid.toString(), cookies)
+                if (fullIds.size > idList.size) fullIds else idList
+            } else {
+                idList
+            }
+            fetchSongsByIds(allIds, cookies)
         } catch (e: Exception) {
             AppLogger.error("[PlaylistApi] getLikedSongs failed", e)
             emptyList()
         }
     }
 
-    private fun toSongInfo(s: JSONObject): SongInfo {        val al = s.optJSONObject("al") ?: s.optJSONObject("album")
+    private fun getPlaylistTrackIds(playlistId: String, cookies: Map<String, String>): List<Long> {
+        return try {
+            val raw = api.eapiPost(
+                "v6/playlist/detail",
+                "{\"id\":$playlistId,\"n\":1,\"s\":8}",
+                cookies,
+                callTimeoutMs = 15_000L,
+            )
+            val pl = JSONObject(raw).optJSONObject("playlist") ?: return emptyList()
+            val arr = pl.optJSONArray("trackIds") ?: return emptyList()
+            (0 until arr.length()).mapNotNull { index ->
+                arr.optJSONObject(index)?.optLong("id")?.takeIf { it > 0L }
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun toSongInfo(s: JSONObject): SongInfo {
+        val al = s.optJSONObject("al") ?: s.optJSONObject("album")
         val ar = s.optJSONArray("ar") ?: s.optJSONArray("artists")
         return SongInfo(
             id = s.optLong("id"),

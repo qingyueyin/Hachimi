@@ -34,6 +34,8 @@ class DiscoveryCacheManager(context: Context) {
 
     companion object {
         private const val CHARTS_CACHE_KEY = "charts_v2"
+        // v2：旧缓存只有前 50 个歌单，且没存 subscribed 标记
+        private const val USER_PLAYLISTS_CACHE_KEY = "userplaylists_v2"
         // 缓存有效期
         private const val CACHE_VALIDITY_DEFAULT_MS = 5 * 60 * 1000L      // 默认 5 分钟
         private const val CACHE_VALIDITY_CLOUD_MS = 24 * 60 * 60 * 1000L  // 云盘歌曲 24 小时
@@ -239,15 +241,15 @@ class DiscoveryCacheManager(context: Context) {
 
     // ── User Playlists ──
 
-    fun isUserPlaylistsCacheValid(): Boolean = isCacheValid("userplaylists", CACHE_VALIDITY_PLAYLISTS_MS)
+    fun isUserPlaylistsCacheValid(): Boolean = isCacheValid(USER_PLAYLISTS_CACHE_KEY, CACHE_VALIDITY_PLAYLISTS_MS)
 
     fun userPlaylistsFingerprint(playlists: List<PlaylistApi.UserPlaylist>): String =
         fp(*playlists.map { "${it.id}:${it.trackCount}" }.toTypedArray())
 
-    fun getUserPlaylistsFingerprint(): String = getFingerprint("userplaylists")
-    fun userPlaylistsFingerprintMatches(fp: String): Boolean = fp == getFingerprint("userplaylists") && fp.isNotEmpty()
+    fun getUserPlaylistsFingerprint(): String = getFingerprint(USER_PLAYLISTS_CACHE_KEY)
+    fun userPlaylistsFingerprintMatches(fp: String): Boolean = fp == getFingerprint(USER_PLAYLISTS_CACHE_KEY) && fp.isNotEmpty()
 
-    fun getCachedUserPlaylists(): List<PlaylistApi.UserPlaylist>? = parsePlaylists(getJson("userplaylists"))
+    fun getCachedUserPlaylists(): List<PlaylistApi.UserPlaylist>? = parsePlaylists(getJson(USER_PLAYLISTS_CACHE_KEY))
 
     fun saveUserPlaylists(playlists: List<PlaylistApi.UserPlaylist>) {
         val fp = fp(*playlists.map { "${it.id}:${it.trackCount}" }.toTypedArray())
@@ -259,10 +261,11 @@ class DiscoveryCacheManager(context: Context) {
                     put("coverUrl", p.coverUrl)
                     put("trackCount", p.trackCount)
                     put("creator", p.creator)
+                    put("subscribed", p.subscribed)
                 })
             }
         }.toString()
-        saveWithFingerprint("userplaylists", fp, json)
+        saveWithFingerprint(USER_PLAYLISTS_CACHE_KEY, fp, json)
     }
 
     private fun parsePlaylists(json: String?): List<PlaylistApi.UserPlaylist>? {
@@ -276,7 +279,8 @@ class DiscoveryCacheManager(context: Context) {
                     name = o.optString("name"),
                     coverUrl = o.optString("coverUrl"),
                     trackCount = o.optInt("trackCount"),
-                    creator = o.optString("creator")
+                    creator = o.optString("creator"),
+                    subscribed = o.optBoolean("subscribed")
                 )
             }
         } catch (_: Exception) { null }

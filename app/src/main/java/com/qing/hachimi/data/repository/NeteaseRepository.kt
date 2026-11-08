@@ -593,9 +593,9 @@ class NeteaseRepository(
     }
     // ── User playlist methods ──
 
-    suspend fun getUserPlaylists(userId: Long, limit: Int = 50, offset: Int = 0): Result<List<PlaylistApi.UserPlaylist>> = withContext(Dispatchers.IO) {
+    suspend fun getUserPlaylists(userId: Long): Result<List<PlaylistApi.UserPlaylist>> = withContext(Dispatchers.IO) {
         try {
-            val list = playlistApi.getUserPlaylists(userId, cookies(), limit, offset)
+            val list = playlistApi.getAllUserPlaylists(userId, cookies())
             Result.success(list.map { it.copy(coverUrl = normalizeCoverUrl(it.coverUrl)) })
         } catch (e: Exception) {
             e.rethrowIfCancellation()
