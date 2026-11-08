@@ -56,10 +56,10 @@ class PlaylistApi(private val api: NeteaseApi) {
             val byId = parsed.associateBy { it.id }
             val missingIds = allIds.filterNot { byId.containsKey(it) }
             val fetched = if (missingIds.isEmpty()) emptyList() else fetchSongsByIds(missingIds, cookies)
-            val allById = byId + fetched.associateBy { it.id }
             val songs = if (allIds.isEmpty()) {
                 (parsed + fetched).distinctBy { it.id }
             } else {
+                val allById = byId + fetched.associateBy { it.id }
                 allIds.mapNotNull { allById[it] }
             }
 

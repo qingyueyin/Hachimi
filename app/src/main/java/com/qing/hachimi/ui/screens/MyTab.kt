@@ -90,11 +90,14 @@ private val myEntries = listOf(
     MyEntry("收藏艺人", MiuixIcons.Music, MySection.COLLECTED_ARTISTS),
 )
 
+// 只挂在「我的歌单」二级页顶部的入口；点它们时替换栈顶而不是再压一层
+private val MINE_SUB_ENTRIES = listOf(MySection.COLLECTED_ALBUMS, MySection.COLLECTED_ARTISTS)
+
 @Composable
 fun MyTab(
     state: MyUiState,
+    myNavStack: androidx.compose.runtime.snapshots.SnapshotStateList<NavKey>,
     onOpenSection: (MySection) -> Unit,
-    onBack: () -> Unit,
     onComingSoon: () -> Unit,
     onPlaylistClick: (PlaylistApi.UserPlaylist) -> Unit,
     onToggleSong: (Long) -> Unit,
@@ -109,6 +112,7 @@ fun MyTab(
     onLoadMoreArtists: () -> Unit,
     onAlbumClick: (AlbumResult) -> Unit,
     onArtistClick: (ArtistResult) -> Unit,
+    onBackToList: () -> Unit,
     innerPadding: PaddingValues = PaddingValues(0.dp),
     isLoggedIn: Boolean = false,
     scrollToTopTrigger: Int = 0,
@@ -120,6 +124,50 @@ fun MyTab(
     // 顶栏高度由 Miuix TopAppBar 决定，一级页和二级页统一使用 Scaffold 给的内边距
     val primaryPadding = innerPadding
     val contextPadding = innerPadding
+
+    val onPopDetail: () -> Unit = {
+        // 详情层出栈后统一由 syncMyNavStack 把 ViewModel 退回列表，收藏专辑/艺人的分页状态会保留
+        onBackToList()
+    }
+
+    val onBack: () -> Unit = {
+        if (myNavStack.size > 1) myNavStack.removeAt(myNavStack.lastIndex)
+    }
+    // 返回栈是导航的唯一事实来源：入栈/出栈直接改 navStack。
+    // 首帧按 ViewModel 的 section / isPlaylistDetail 还原栈深，Tab 销毁重建后也能回到原页。
+    val navStack = myNavStack
+    LaunchedEffect(state.section, state.isPlaylistDetail) {
+        syncMyNavStack(
+            stack = navStack,
+            section = state.section,
+            isPlaylistDetail = state.isPlaylistDetail,
+            playlistId = state.playlistId,
+            playlistName = state.playlistName,
+        )
+    }
+    val openSectionNav: (MySection) -> Unit = { section ->
+        onOpenSection(section)
+        if (navStack.none { it == NavKey2.MySectionPage(section) }) {
+            navStack.add(NavKey2.MySectionPage(section))
+        }
+    }
+    val openPlaylistNav: (PlaylistApi.UserPlaylist) -> Unit = { playlist ->
+        onPlaylistClick(playlist)
+        navStack.add(NavKey2.MyPlaylistDetail(playlist.id, playlist.name))
+    }
+    // 收藏专辑/艺人同样进详情层，和歌单共用一个页面
+    val openAlbumNav: (AlbumResult) -> Unit = { album ->
+        onAlbumClick(album)
+        navStack.add(NavKey2.MyPlaylistDetail(album.id, album.name))
+    }
+    val openArtistNav: (ArtistResult) -> Unit = { artist ->
+        onArtistClick(artist)
+        navStack.add(NavKey2.MyPlaylistDetail(artist.id, artist.name))
+    }
+    // 只负责出栈，ViewModel 状态由上面的 LaunchedEffect 跟着栈同步
+    val backNav: () -> Unit = {
+        if (navStack.size > 1) navStack.removeAt(navStack.lastIndex)
+    }
     if (!isLoggedIn) {
         Box(
             modifier = Modifier.fillMaxSize().padding(primaryPadding),
@@ -129,44 +177,18 @@ fun MyTab(
         }
         return
     }
-
-    // 返回栈是导航的唯一事实来源：入栈/出栈直接改 navStack。
-    // 首帧按 ViewModel 的 section / isPlaylistDetail 还原栈深，Tab 销毁重建后也能回到原页。
-    val navStack = remember {
-        mutableStateListOf<NavKey>().apply {
-            add(NavKey2.MyHome)
-            if (state.section != MySection.HOME) {
-                add(NavKey2.MySectionPage(state.section))
-                if (state.isPlaylistDetail) {
-                    add(NavKey2.MyPlaylistDetail(0L, state.playlistName))
-                }
+    // 再点当前 section（比如我的歌单里的「收藏专辑」入口）时替换栈顶，避免栈越压越深
+    val openEntryNav: (MySection) -> Unit = { section ->
+        if (MINE_SUB_ENTRIES.contains(section)) {
+            if (navStack.size > 1) {
+                navStack[navStack.lastIndex] = NavKey2.MySectionPage(section)
+            } else {
+                navStack.add(NavKey2.MySectionPage(section))
             }
-        }
-    }
-    val openSectionNav: (MySection) -> Unit = { section ->
-        if (navStack.size > 1) {
-            navStack[navStack.lastIndex] = NavKey2.MySectionPage(section)
+            onOpenSection(section)
         } else {
-            navStack.add(NavKey2.MySectionPage(section))
+            openSectionNav(section)
         }
-        onOpenSection(section)
-    }
-    val openPlaylistNav: (PlaylistApi.UserPlaylist) -> Unit = { playlist ->
-        navStack.add(NavKey2.MyPlaylistDetail(playlist.id, playlist.name))
-        onPlaylistClick(playlist)
-    }
-    // 收藏专辑/艺人同样进详情层，和歌单共用一个页面
-    val openAlbumNav: (AlbumResult) -> Unit = { album ->
-        navStack.add(NavKey2.MyPlaylistDetail(album.id, album.name))
-        onAlbumClick(album)
-    }
-    val openArtistNav: (ArtistResult) -> Unit = { artist ->
-        navStack.add(NavKey2.MyPlaylistDetail(artist.id, artist.name))
-        onArtistClick(artist)
-    }
-    val backNav: () -> Unit = {
-        if (navStack.size > 1) navStack.removeAt(navStack.lastIndex)
-        onBack()
     }
     NavDisplay(
         backStack = navStack,
@@ -181,7 +203,7 @@ fun MyTab(
         entry<NavKey2.MyHome> {
             MyHome(
                 state = state,
-                onOpenSection = openSectionNav,
+                onOpenSection = openEntryNav,
                 onPlaylistClick = openPlaylistNav,
                 onRefresh = onRefresh,
                 innerPadding = primaryPadding,
@@ -193,7 +215,7 @@ fun MyTab(
             PageSurface {
                 MyList(
                     state = state,
-                    onOpenSection = openSectionNav,
+                    onOpenSection = openEntryNav,
                     onPlaylistClick = openPlaylistNav,
                     onToggleSong = onToggleSong,
                     onSelectAll = onSelectAll,
@@ -223,6 +245,10 @@ fun MyTab(
                 )
             }
         }
+    }
+    // 栈出到哪一层，ViewModel 就跟到哪一层（按返回键、顶栏返回都走这里）
+    LaunchedEffect(navStack.size) {
+        if (state.isPlaylistDetail && navStack.none { it is NavKey2.MyPlaylistDetail }) onPopDetail()
     }
 }
 

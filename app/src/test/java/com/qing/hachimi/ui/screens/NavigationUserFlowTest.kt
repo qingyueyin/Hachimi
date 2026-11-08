@@ -3,6 +3,7 @@ package com.qing.hachimi.ui.screens
 import com.qing.hachimi.data.local.AccountHistoryManager
 import com.qing.hachimi.data.local.CookieManager
 import com.qing.hachimi.data.local.DiscoveryCacheManager
+import com.qing.hachimi.data.local.FloatingBarEffect
 import com.qing.hachimi.data.local.FolderNamingFormat
 import com.qing.hachimi.data.local.NamingFormat
 import com.qing.hachimi.data.local.SettingsManager
@@ -71,6 +72,8 @@ class NavigationUserFlowTest {
             `when`(it.customNamingTemplate).thenReturn("")
             `when`(it.artistDelimiter).thenReturn("、")
             `when`(it.getFilteredQualityKeys()).thenReturn(listOf("exhigh"))
+            // enum 属性 Mockito 默认返回 null，会让 copy() 的非空参数崩掉
+            `when`(it.floatingBarEffect).thenReturn(FloatingBarEffect.FROSTED_GLASS)
         }
         val cookies = mock(CookieManager::class.java).also {
             `when`(it.isLoggedIn()).thenReturn(false)

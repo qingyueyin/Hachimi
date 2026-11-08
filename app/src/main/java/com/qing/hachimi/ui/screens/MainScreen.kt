@@ -103,6 +103,28 @@ fun MainScreen(
     val searchInputInteraction = remember { MutableInteractionSource() }
     var searchBarBottomY by remember { mutableIntStateOf(0) }
     var currentTab by remember { mutableStateOf(Tab.DISCOVER) }
+    // 我的页的返回栈放在外层，顶栏返回、系统返回和 MyTab 内部共用一个栈
+    val myNavStack = remember {
+        mutableStateListOf<NavKey>().apply {
+            add(NavKey2.MyHome)
+            if (myUiState.section != MySection.HOME) {
+                add(NavKey2.MySectionPage(myUiState.section))
+                if (myUiState.isPlaylistDetail) {
+                    add(NavKey2.MyPlaylistDetail(0L, myUiState.playlistName))
+                }
+            }
+        }
+    }
+    // ViewModel 的层级变化（比如收藏专辑加载失败退回列表）要跟着压栈，避免页面和导航栈脱节
+    LaunchedEffect(myUiState.section, myUiState.isPlaylistDetail) {
+        syncMyNavStack(
+            stack = myNavStack,
+            section = myUiState.section,
+            isPlaylistDetail = myUiState.isPlaylistDetail,
+            playlistId = myUiState.playlistId,
+            playlistName = myUiState.playlistName,
+        )
+    }
     LaunchedEffect(currentTab) {
         AppLogger.currentScreen = "Tab.${currentTab.name}"
         viewModel.updateCurrentTab(currentTab.name)
@@ -396,13 +418,8 @@ fun MainScreen(
             }
             ContextBackTarget.DISCOVER -> discoverViewModel.goBack()
             ContextBackTarget.MY_SECTION -> {
-                // 由导航栈决定回哪一层
-                if (myUiState.isPlaylistDetail) {
-                    myViewModel.clearSongs()
-                    myViewModel.backToSectionList()
-                } else {
-                    myViewModel.backToHome()
-                }
+                // 我的页的返回只出栈，ViewModel 状态由 MyTab 跟着栈同步
+                if (myNavStack.size > 1) myNavStack.removeAt(myNavStack.lastIndex)
             }
             null -> Unit
         }
@@ -516,6 +533,8 @@ fun MainScreen(
                             TabContent(
                     currentTab = currentTab,
                     uiState = uiState,
+                    myUiState = myUiState,
+                    myNavStack = myNavStack,
                     discoverViewModel = discoverViewModel,
                     searchViewModel = searchViewModel,
                     myViewModel = myViewModel,
@@ -533,7 +552,6 @@ fun MainScreen(
                     onOpenDownloadedFile = onOpenDownloadedFile,
                     onPickDownloadDir = onPickDownloadDir,
                     onPickMusicFolder = onPickMusicFolder,
-                    onMyBack = performContextBack,
                     onBrowserLoginClick = openBrowserLogin,
                     onCookieLoginClick = { openCookieLoginDialog(1) },
                     onMusicULoginClick = { openCookieLoginDialog(0) },
@@ -872,6 +890,7 @@ internal fun resolveContextBackTarget(
 private fun TabContent(
     currentTab: Tab,
     uiState: MainUiState,
+    myUiState: MyUiState,
     downloadProgress: Map<Long, DownloadProgress>,
     viewModel: MainViewModel,
     discoverViewModel: DiscoverViewModel,
@@ -880,6 +899,7 @@ private fun TabContent(
     upgradeViewModel: UpgradeViewModel,
     navBackStack: androidx.compose.runtime.snapshots.SnapshotStateList<NavKey>,
     searchNavStack: androidx.compose.runtime.snapshots.SnapshotStateList<NavKey>,
+    myNavStack: androidx.compose.runtime.snapshots.SnapshotStateList<NavKey>,
     searchInputMode: InputMode,
     searchInteraction: MutableInteractionSource,
     searchBarBottomY: Int,
@@ -888,7 +908,6 @@ private fun TabContent(
     onOpenDownloadedFile: (Long) -> Unit,
     onPickDownloadDir: () -> Unit,
     onPickMusicFolder: () -> Unit,
-    onMyBack: () -> Unit,
     onBrowserLoginClick: () -> Unit,
     onCookieLoginClick: () -> Unit,
     onMusicULoginClick: () -> Unit,
@@ -1039,14 +1058,10 @@ private fun TabContent(
                 sessionStartedAt = sessionStartedAt,
             )
             Tab.MY -> {
-                val myUiState by myViewModel.uiState.collectAsStateWithLifecycle()
-                LaunchedEffect(currentTab, uiState.isLoggedIn) {
-                    if (uiState.isLoggedIn) myViewModel.openHome()
-                }
                 MyTab(
                     state = myUiState,
+                    myNavStack = myNavStack,
                     onOpenSection = myViewModel::openSection,
-                    onBack = onMyBack,
                     onComingSoon = myViewModel::showComingSoon,
                     onPlaylistClick = myViewModel::loadPlaylistSongs,
                     onToggleSong = myViewModel::toggleSongSelection,
@@ -1061,6 +1076,7 @@ private fun TabContent(
                     onLoadMoreArtists = myViewModel::loadMoreCollectedArtists,
                     onAlbumClick = myViewModel::loadCollectedAlbumSongs,
                     onArtistClick = myViewModel::loadCollectedArtistSongs,
+                    onBackToList = myViewModel::clearPlaylistDetail,
                     innerPadding = innerPadding,
                     isLoggedIn = uiState.isLoggedIn,
                     scrollToTopTrigger = scrollToTopTrigger,

@@ -86,6 +86,8 @@ data class MyUiState(
     val playlistDetail: com.qing.hachimi.data.model.CollectionDetail? = null,
     /** 是否停在歌单详情。导航层级由 MyTab 的返回栈持有，这里只留重建栈所需的最小信息 */
     val isPlaylistDetail: Boolean = false,
+    /** 当前详情对应的歌单 id，重建返回栈和同步导航时用 */
+    val playlistId: Long = 0L,
 ) {
     val myPlaylists: List<PlaylistApi.UserPlaylist>
         get() = userPlaylists.filter { !it.subscribed }
@@ -117,7 +119,9 @@ class MyViewModel(
         if (state.section == MySection.HOME && state.userPlaylists.isNotEmpty()) return
         _uiState.value = state.copy(
             section = MySection.HOME,
-            isPlaylistDetail = false,songs = emptyList(),
+            isPlaylistDetail = false,
+            playlistId = 0L,
+            songs = emptyList(),
             selectedIds = emptySet(),
             playlistName = "",
             statusMessage = null,
@@ -134,6 +138,7 @@ class MyViewModel(
                 _uiState.value = _uiState.value.copy(
                     section = MySection.LIKED,
                     isPlaylistDetail = false,
+                    playlistId = 0L,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -145,6 +150,7 @@ class MyViewModel(
                 _uiState.value = _uiState.value.copy(
                     section = MySection.PLAYLISTS,
                     isPlaylistDetail = false,
+                    playlistId = 0L,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -156,6 +162,7 @@ class MyViewModel(
                 _uiState.value = _uiState.value.copy(
                     section = MySection.COLLECTED,
                     isPlaylistDetail = false,
+                    playlistId = 0L,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -167,6 +174,7 @@ class MyViewModel(
                 _uiState.value = _uiState.value.copy(
                     section = MySection.CLOUD,
                     isPlaylistDetail = false,
+                    playlistId = 0L,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -178,6 +186,7 @@ class MyViewModel(
                 _uiState.value = _uiState.value.copy(
                     section = MySection.RANK,
                     isPlaylistDetail = false,
+                    playlistId = 0L,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -189,6 +198,7 @@ class MyViewModel(
                 _uiState.value = _uiState.value.copy(
                     section = MySection.RECENT,
                     isPlaylistDetail = false,
+                    playlistId = 0L,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -200,6 +210,7 @@ class MyViewModel(
                 _uiState.value = _uiState.value.copy(
                     section = MySection.FOOTPRINT,
                     isPlaylistDetail = false,
+                    playlistId = 0L,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -211,6 +222,7 @@ class MyViewModel(
                 _uiState.value = _uiState.value.copy(
                     section = MySection.COLLECTED_ALBUMS,
                     isPlaylistDetail = false,
+                    playlistId = 0L,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -222,6 +234,7 @@ class MyViewModel(
                 _uiState.value = _uiState.value.copy(
                     section = MySection.COLLECTED_ARTISTS,
                     isPlaylistDetail = false,
+                    playlistId = 0L,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -235,7 +248,9 @@ class MyViewModel(
     fun backToHome() {
         _uiState.value = _uiState.value.copy(
             section = MySection.HOME,
-            isPlaylistDetail = false,songs = emptyList(),
+            isPlaylistDetail = false,
+            playlistId = 0L,
+            songs = emptyList(),
             selectedIds = emptySet(),
             playlistName = "",
             statusMessage = null,
@@ -334,6 +349,7 @@ class MyViewModel(
             isLoading = true,
             statusMessage = null,
             isPlaylistDetail = true,
+            playlistId = playlist.id,
             playlistName = playlist.name,
         )
         viewModelScope.launch {
@@ -629,6 +645,7 @@ class MyViewModel(
             isLoading = true,
             statusMessage = null,
             isPlaylistDetail = true,
+            playlistId = album.id,
             playlistName = album.name,
         )
         viewModelScope.launch {
@@ -660,6 +677,7 @@ class MyViewModel(
             isLoading = true,
             statusMessage = null,
             isPlaylistDetail = true,
+            playlistId = artist.id,
             playlistName = artist.name,
         )
         viewModelScope.launch {
@@ -733,7 +751,7 @@ class MyViewModel(
                         settings = settingsManager,
                         engine = downloadEngine,
                         options = options,
-                        urlProvider = { repository.getCloudDownloadUrl(it.id) },
+                        urlProvider = { repository.getCloudDownloadUrl(it.id).map { url -> url to "" } },
                     )
                 } else {
                     DownloadPreparation.enqueueSongs(
@@ -831,14 +849,15 @@ class MyViewModel(
         _uiState.value = _uiState.value.copy(cloudSearchQuery = query, selectedIds = emptySet())
     }
 
-    fun clearSongs() {
-        // 从歌单详情返回：弹出 SONGS 层，回到分类列表
+    /** 清掉详情层（收藏专辑/艺人返回列表时用，保留列表和分页状态） */
+    fun clearPlaylistDetail() {
         _uiState.value = _uiState.value.copy(
             songs = emptyList(),
             selectedIds = emptySet(),
             playlistName = "",
             playlistDetail = null,
             isPlaylistDetail = false,
+            playlistId = 0L,
         )
     }
 
@@ -850,6 +869,7 @@ class MyViewModel(
             playlistName = "",
             playlistDetail = null,
             isPlaylistDetail = false,
+            playlistId = 0L,
         )
     }
 
