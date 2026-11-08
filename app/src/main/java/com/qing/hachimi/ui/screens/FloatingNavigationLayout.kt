@@ -38,9 +38,13 @@ internal fun floatingBarTabMinWidth(itemCount: Int): Dp = when {
     else -> 52.dp
 }
 
+/** 单个标签的宽度上限：平板上不再把每个标签拉宽，整条保持紧凑（参考 SukiSU 的悬浮底栏） */
+internal val FloatingBarTabMaxWidth = 88.dp
+
 internal fun compactFloatingBarWidth(itemCount: Int, maxWidth: Dp): Dp {
     if (itemCount <= 0) return 0.dp
-    val desired = floatingBarTabMinWidth(itemCount) * itemCount + FloatingBarInnerPadding * 2
+    val desired = (floatingBarTabMinWidth(itemCount) * itemCount + FloatingBarInnerPadding * 2)
+        .coerceAtMost(FloatingBarTabMaxWidth * itemCount + FloatingBarInnerPadding * 2)
     val limit = maxWidth.coerceAtLeast(0.dp)
     return if (desired < limit) desired else limit
 }

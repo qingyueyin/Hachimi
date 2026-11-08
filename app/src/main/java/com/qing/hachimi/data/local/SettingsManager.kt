@@ -186,6 +186,10 @@ class SettingsManager(context: Context) {
         get() = prefs.getBoolean("liquid_glass", false)
         set(value) = prefs.edit().putBoolean("liquid_glass", value).apply()
 
+    var navigationRailExpanded: Boolean
+        get() = prefs.getBoolean("navigation_rail_expanded", false)
+        set(value) = prefs.edit().putBoolean("navigation_rail_expanded", value).apply()
+
     fun getFilteredQualityKeys(): List<String> {
         val aiQualities = setOf("jymaster", "sky", "jyeffect")
         return com.qing.hachimi.data.api.NeteaseApi.QUALITY_MAP.keys

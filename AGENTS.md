@@ -236,6 +236,22 @@ fun retry() {
 |---|---|
 | **SukiSU-Ultra** | KernelSU 管理器（Rust + Android）。其 manager/ 目录为 Android 端，参考 UI 风格与图标设计 |
 
+## 平板适配 (2026-11-02)
+
+宽屏（窗口宽度 ≥ 840dp，与 Miuix `DialogDefaults.isLargeScreen` 断点一致）走平板布局，手机端完全不变：
+
+- **左侧导航栏**：Miuix `NavigationRail`（可展开/收起，状态由 `rememberNavigationRailState` 保存）替代底部悬浮条；实现见 `MainScreen.kt` 的 `MainNavigationRail`。内容区放在外层 `Row` 里 `weight(1f)`。
+- **内容限宽**：`AdaptiveLayout.kt` 的 `WidthLimiter` 把 Tab 内容限宽 640dp 居中；顶部磨砂层（TopChromeOverlay）保持全宽，只限内容不限模糊。
+- **网格自适应**：`AdaptiveLayout.kt` 的 `adaptiveGridColumns()` 在宽屏下按"单元格不超过 280dp"自动加列（用户列数只增不减）；`DiscoverTab.kt` 的 `DiscoverCategory` 用 `BoxWithConstraints` 提供可用宽度。
+- **对话框**：Miuix `WindowDialog` 已内置大屏居中 + 限宽 420dp，但会把内容总高度限制为窗口的 2/3；固定高度的滚动区会让底部按钮被裁掉，写法见下文「对话框内容被裁切」。
+- **底部内容内边距**：`floatingContentBottomPadding(hasFloatingBar = !isWide)`，宽屏不再为悬浮条预留空间。
+- 单元测试：`AdaptiveLayoutTest.kt`（断点判断 + 列数计算）；`FloatingNavigationLayoutTest` 的 tablet 分支测试此时生效。
+
+## 构建
+
+- **本机 SDK 37 的坑**：Google 已把 API 37 平台包改名为 `platforms;android-37.0`（小版本命名），AGP 按 `compileSdk = 37` 找不到 `android-37` 时会反复自动安装坏包。解决：`app/build.gradle.kts` 里用 `compileSdk = 37` + `compileSdkMinor = 0`（AGP 8.11+ 的 DSL，映射到 `android-37.0`）。AGP 9.5 起不再需要 `android.suppressUnsupportedCompileSdk`。
+- 不要手改 `D:\Env\Android\platforms\android-37.0` 里的 `package.xml` / `source.properties`（元数据是官方原样，`ApiLevel=37.0` 不是损坏），AGP 自动安装器会覆盖手工修改。
+
 ## 常见问题
 
 ### 一二级页面切换动画闪烁问题 ⚠️
@@ -396,3 +412,9 @@ BackHandler(enabled = settingsBackEnabled) {
 - 版本联动：`kotlin` 版本同时驱动 kotlin-gradle-plugin、compose 编译器插件和 serialization 插件；升级 Kotlin 时这些会一起变。
 - material-kolor 5.0.1 与 4.x 的 `PaletteStyle` / `ColorSpec` API 兼容，不需要改业务代码。
 - 验证标准（依赖升级必跑）：`:app:compileDebugKotlin` + `:app:testDebugUnitTest` + `:app:lintDebug` + `:app:assembleDebug`（debug 开启 R8，可验证混淆链路）。
+
+### 对话框内容被裁切（平板/大屏）
+
+- Miuix `WindowDialog` / `OverlayDialog` 在大屏（宽 ≥840dp 且高 ≥480dp）下会把对话框内容总高度限制为窗口高度的 2/3。
+- 如果对话框内容由「固定高度的滚动区 + 底部勾选框/按钮」组成，总高度超限后底部控件会被直接裁掉（点不到）。
+- 正确写法：滚动区加 `Modifier.weight(1f, fill = false)`，空间充足时按内容显示，空间不足时收缩并内部滚动，底部按钮始终可见。参考 `DisclaimerDialog.kt`。

@@ -50,9 +50,12 @@ fun DisclaimerDialog(
         },
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
+            // 文本区按剩余高度伸缩：空间不足时内部滚动，保证勾选框和按钮始终可见
+            // （Miuix 大屏下会把对话框总高度限制在窗口的 2/3，固定高度会导致底部控件被裁掉）
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f, fill = false)
                     .heightIn(max = 320.dp)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp),

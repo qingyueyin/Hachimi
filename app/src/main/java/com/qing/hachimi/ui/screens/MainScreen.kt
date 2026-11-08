@@ -75,6 +75,11 @@ import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.window.WindowDialog
+import top.yukonga.miuix.kmp.basic.NavigationRail
+import top.yukonga.miuix.kmp.basic.NavigationRailItem
+import top.yukonga.miuix.kmp.basic.NavigationRailState
+import top.yukonga.miuix.kmp.basic.NavigationRailValue
+import top.yukonga.miuix.kmp.basic.rememberNavigationRailState
 
 import androidx.compose.ui.graphics.vector.ImageVector
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -140,6 +145,20 @@ fun MainScreen(
     var accountHistoryVersion by remember { mutableIntStateOf(0) }
     var skipTabTransition by remember { mutableStateOf(false) }
     var skipSettingsTransition by remember { mutableStateOf(false) }
+    // 侧边导航栏：够宽或横屏大尺寸时启用（参考 SukiSU），展开状态跟随设置保存。
+    // 用户开启了悬浮底栏特效（毛玻璃/液态玻璃）时，优先保留底部悬浮栏，不换成侧边栏。
+    val railScreen = rememberIsNavigationRailScreen()
+    val isWide = railScreen && !uiState.blurEffect && !uiState.liquidGlass
+    val railState = rememberNavigationRailState(
+        initialValue = if (settingsManager.navigationRailExpanded) {
+            NavigationRailValue.Expanded
+        } else {
+            NavigationRailValue.Collapsed
+        },
+    )
+    LaunchedEffect(railState.currentValue) {
+        settingsManager.navigationRailExpanded = railState.isExpanded
+    }
     val scope = rememberCoroutineScope()
     LaunchedEffect(skipTabTransition) {
         if (skipTabTransition) {
@@ -339,7 +358,7 @@ fun MainScreen(
 
     val mainBottomContentPadding = floatingContentBottomPadding(
         systemBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
-        hasFloatingBar = true,
+        hasFloatingBar = !isWide,
     )
 
     val backdrop = rememberBlurBackdrop(
@@ -446,8 +465,19 @@ fun MainScreen(
         },
     )
 
+    Row(modifier = Modifier.fillMaxSize()) {
+        if (isWide) {
+            MainNavigationRail(
+                currentTab = currentTab,
+                isLoggedIn = uiState.isLoggedIn,
+                railState = railState,
+                onTabChange = onTabClick,
+            )
+        }
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
     ) {
         // Background preview: shows target page during predictive back gesture
         if (backProgress > 0f && lastContextBackTarget != null) {
@@ -537,7 +567,8 @@ fun MainScreen(
                     CompositionLocalProvider(
                         LocalMainBottomContentPadding provides mainBottomContentPadding,
                     ) {
-                        TabContent(
+                        WidthLimiter {
+                            TabContent(
                     currentTab = currentTab,
                     uiState = uiState,
                     discoverViewModel = discoverViewModel,
@@ -603,6 +634,7 @@ fun MainScreen(
                     sessionStartedAt = downloadSessionStartedAt,
                     topChromeScrollOffset = topChromeScrollOffset,
                         )
+                        }
                     }
                 }
 
@@ -639,19 +671,26 @@ fun MainScreen(
         }
         }
 
-        // 底部操作区（Bottom bar），置于前景之外，实时模糊始终正确
-        MainBottomBar(
-            modifier = Modifier.align(Alignment.BottomCenter),
-            currentTab = currentTab,
-            isLoggedIn = uiState.isLoggedIn,
-            backdrop = backdrop,
-            isBlurEnabled = uiState.blurEffect,
-            isLiquidGlassEnabled = uiState.liquidGlass,
-            onTabChange = onTabClick,
-        )
+        // 底部操作区（Bottom bar），置于前景之外，实时模糊始终正确；宽屏由左侧导航栏接管
+        //
+        // 预测性返回手势期间前景层被平移+缩小，而实时模糊取的是这份画面，
+        // 会让底部栏看起来跟着动、模糊错位、松手瞬间跳位。手势中改为纯色样式（不读画面），
+        // 提交后 backProgress 归零、恢复模糊只发生在同一帧内，不会出现可见跳变。
+        if (!isWide) {
+            MainBottomBar(
+                modifier = Modifier.align(Alignment.BottomCenter),
+                currentTab = currentTab,
+                isLoggedIn = uiState.isLoggedIn,
+                backdrop = backdrop.takeIf { backProgress == 0f },
+                isBlurEnabled = uiState.blurEffect,
+                isLiquidGlassEnabled = uiState.liquidGlass,
+                onTabChange = onTabClick,
+            )
+        }
+    }
     }
 
-        // Dialogs live outside Scaffold, so use window dialogs instead of Scaffold-hosted overlays.
+    // Dialogs live outside Scaffold, so use window dialogs instead of Scaffold-hosted overlays.
     WindowDialog(
         show = showCookieDialog,
         title = if (loginMode == 0) "MUSIC_U 登录" else "Cookie 登录",
@@ -1039,8 +1078,11 @@ fun MainScreen(
 
                 Spacer(Modifier.height(4.dp))
 
+                // 大屏对话框限高为窗口 2/3：列表按剩余空间伸缩，保证底部登录按钮不被裁掉
                 LazyColumn(
-                    modifier = Modifier.heightIn(max = 200.dp),
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .heightIn(max = 200.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(accounts.size) { index ->
@@ -1147,6 +1189,31 @@ fun MainScreen(
     }
 }
 
+
+@Composable
+private fun MainNavigationRail(
+    currentTab: Tab,
+    isLoggedIn: Boolean,
+    railState: NavigationRailState,
+    onTabChange: (Tab) -> Unit,
+) {
+    val visibleTabs = visibleMainTabs(isLoggedIn)
+    NavigationRail(
+        state = railState,
+        color = colorScheme.surface,
+        expandContentDescription = "展开导航栏",
+        collapseContentDescription = "收起导航栏",
+    ) {
+        visibleTabs.forEach { tab ->
+            NavigationRailItem(
+                selected = tab == currentTab,
+                onClick = { onTabChange(tab) },
+                icon = tab.icon,
+                label = tab.label,
+            )
+        }
+    }
+}
 
 @Composable
 private fun MainBottomBar(

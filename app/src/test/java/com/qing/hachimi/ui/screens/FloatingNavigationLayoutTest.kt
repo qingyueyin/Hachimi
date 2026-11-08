@@ -90,4 +90,12 @@ class FloatingNavigationLayoutTest {
     fun `empty bar has no width`() {
         assertEquals(0.dp, compactFloatingBarWidth(0, 400.dp))
     }
+
+    @Test
+    fun `tablet keeps the bar compact instead of stretching tabs`() {
+        // 平板可用宽度很大时，标签宽度不会被拉到 88dp 以上，整条不会被拉成一整行长条
+        assertEquals(68.dp * 4 + 8.dp, compactFloatingBarWidth(4, 1280.dp))
+        assertEquals(76.dp * 3 + 8.dp, compactFloatingBarWidth(3, 1280.dp))
+        assertEquals(52.dp * 6 + 8.dp, compactFloatingBarWidth(6, 1280.dp))
+    }
 }
