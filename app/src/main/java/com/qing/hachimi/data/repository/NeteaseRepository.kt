@@ -87,7 +87,14 @@ class NeteaseRepository(
     suspend fun getPlaylistSongs(playlistId: String): Result<List<Song>> =
         getPlaylistDetail(playlistId).map(CollectionContent::songs)
 
-    suspend fun getSongUrl(songId: String, quality: String): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun getSongUrl(songId: String, quality: String): Result<String> =
+        getSongUrlWithType(songId, quality).map { it.first }
+
+    /**
+     * 返回下载地址和扩展名。扩展名取自接口的 type 字段（flac / mp3），
+     * 因为 CDN 链接常常没有扩展名，按链接猜会把 flac 存成 mp3。
+     */
+    suspend fun getSongUrlWithType(songId: String, quality: String): Result<Pair<String, String>> = withContext(Dispatchers.IO) {
         // Quality fallback: try selected quality first, then step down to lower qualities
         val fallbackOrder = NeteaseApi.fallbackQuality(quality)
         var lastError: String? = null
@@ -108,8 +115,11 @@ class NeteaseRepository(
                     continue
                 }
                 val secureUrl = if (url.startsWith("http://")) "https://${url.substring(7)}" else url
-                AppLogger.debug("getSongUrl: got url for $songId at quality=$q")
-                return@withContext Result.success(secureUrl)
+                val format = result.type?.lowercase().orEmpty()
+                    .takeIf { it in setOf("flac", "mp3", "m4a", "aac", "wav") }
+                    .orEmpty()
+                AppLogger.debug("getSongUrl: got url for $songId at quality=$q, type=${result.type}")
+                return@withContext Result.success(secureUrl to format)
             } catch (e: Exception) {
                 e.rethrowIfCancellation()
                 lastError = e.message

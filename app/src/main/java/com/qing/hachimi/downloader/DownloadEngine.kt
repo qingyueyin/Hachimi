@@ -240,10 +240,11 @@ class DownloadEngine(
     }
 
     fun updateMaxConcurrent(max: Int) {
+        // 目前没有设置项调用这里。以后接上时要换一种做法：Semaphore 的许可数不可变，
+        // 直接替换实例会让已持有旧许可的任务在 finally 里 release 到新实例，导致并发限额失效。
         if (max != currentMaxConcurrent) {
             currentMaxConcurrent = max
-            semaphore = Semaphore(max)
-            AppLogger.info("Download concurrency updated to $max")
+            AppLogger.warn("updateMaxConcurrent($max) 被调用，但并发数只在重启后生效")
         }
     }
 
@@ -304,6 +305,8 @@ class DownloadEngine(
         lyrics: String? = null,
         tagMetadata: SongTagMetadata = SongTagMetadata(),
         groupName: String? = null,
+        /** 接口返回的音频格式（flac/mp3…），非空时优先于从链接猜扩展名 */
+        expectedFormat: String? = null,
         applyFolderGrouping: Boolean = true,
         persistHistory: Boolean = true
     ) {
@@ -337,7 +340,7 @@ class DownloadEngine(
             targetDir.mkdirs()
         }
 
-        val ext = extractFileExtension(url)
+        val ext = expectedFormat?.takeIf { it.isNotBlank() }?.let { "." + it } ?: extractFileExtension(url)
         val fileName = settingsManager.buildFileName(name, artists, qualityLabel, album) + ext
         val file = File(targetDir, fileName)
 
@@ -429,29 +432,30 @@ class DownloadEngine(
                 updateStatus(task, DownloadStatus.FAILED, DownloadFailure.NO_URL); return
             }
 
-val headRequest = downloadRequest(url)
+            val headRequest = downloadRequest(url)
                 .newBuilder()
                 .head()
                 .build()
 
-            val headResponse = client.newCall(headRequest).execute()
             var totalBytes: Long
             var supportsRange: Boolean
             var responseCode: Int
             var acceptRanges: String?
 
             try {
-                val body = headResponse.body
-                totalBytes = body.contentLength()
-                acceptRanges = headResponse.header("Accept-Ranges")
-                supportsRange = headResponse.code == 206 || acceptRanges == "bytes"
-                responseCode = headResponse.code
+                client.newCall(headRequest).execute().use { headResponse ->
+                    val body = headResponse.body
+                    totalBytes = body.contentLength()
+                    acceptRanges = headResponse.header("Accept-Ranges")
+                    supportsRange = headResponse.code == 206 || acceptRanges == "bytes"
+                    responseCode = headResponse.code
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLogger.error("HEAD request failed", e)
                 updateStatus(task, DownloadStatus.FAILED, DownloadFailure.NETWORK)
                 return
-            } finally {
-                headResponse.close()
             }
 
             AppLogger.debug("HEAD request: code=$responseCode, contentLength=$totalBytes, acceptRanges=$acceptRanges")
@@ -465,13 +469,8 @@ val headRequest = downloadRequest(url)
                 return
             }
 
-            // Check if partial file exists from a previous failed download
-            val existingPartial = findPartialFile(file)
-            if (existingPartial != null && existingPartial.exists()) {
-                AppLogger.debug("Found partial file: ${existingPartial.name}")
-                // Delete partial files for a fresh start (range resume is handled per-chunk)
-                cleanupChunksForFile(file)
-            }
+            // 上次中断留下的 .part 保留下来，由 downloadChunk 按字节范围续传；大小对不上时那里会从头下
+            findPartialFile(file)?.let { AppLogger.debug("Found partial file: [${it.name}], will resume by range") }
 
             if (totalBytes <= 0 || !supportsRange) {
                 AppLogger.debug("Range requests not supported, falling back to single stream")
@@ -556,13 +555,13 @@ val headRequest = downloadRequest(url)
                     throw IllegalStateException("Merged file is missing or empty: ${file.name}")
                 }
 
-                cleanupChunks(chunkFiles)
-
+                // 分片加起来应当正好等于 HEAD 报的总长度；差得多说明服务端换了文件或分块错位，不能当成下载成功
                 val actualSize = file.length()
                 if (totalBytes > 0 && actualSize != totalBytes) {
-                    AppLogger.warn("File size mismatch: expected=$totalBytes, actual=$actualSize for ${file.name}")
-                    // Accept the file anyway - some servers report wrong Content-Length
+                    throw IllegalStateException("Merged file size mismatch: expected=$totalBytes, actual=$actualSize")
                 }
+
+                cleanupChunks(chunkFiles)
 
                 // Update downloadedBytes to actual merged file size to ensure 100% progress
                 task.downloadedBytes = actualSize
@@ -634,8 +633,13 @@ val headRequest = downloadRequest(url)
 
         var resumeFrom = 0L
         if (chunkFile.exists()) {
-            resumeFrom = chunkFile.length()
-            AppLogger.debug("[Chunk $index] Resuming from $resumeFrom (chunk file exists: ${chunkFile.name}, size=${chunkFile.length()} bytes)")
+            // 只有大小不超过本段长度才续传：服务端换了文件（Content-Length 变小）时旧分片会越界，必须从头下
+            resumeFrom = chunkFile.length().coerceAtMost(end - start + 1)
+            if (resumeFrom != chunkFile.length()) {
+                chunkFile.delete()
+                resumeFrom = 0L
+            }
+            AppLogger.debug("[Chunk $index] Resuming from $resumeFrom (chunk file exists: ${chunkFile.name})")
         } else {
             AppLogger.debug("[Chunk $index] Starting fresh: bytes $start-$end -> ${chunkFile.name}")
         }

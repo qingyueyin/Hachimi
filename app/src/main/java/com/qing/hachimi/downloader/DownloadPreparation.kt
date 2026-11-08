@@ -114,8 +114,8 @@ object DownloadPreparation {
         settings: SettingsManager,
         engine: DownloadEngine,
         options: Options = optionsFrom(settings),
-        urlProvider: suspend (Song) -> Result<String> = {
-            repository.getSongUrl(it.id.toString(), options.quality)
+        urlProvider: suspend (Song) -> Result<Pair<String, String>> = {
+            repository.getSongUrlWithType(it.id.toString(), options.quality)
         },
     ): BatchResult = coroutineScope {
         val directory = settings.getEffectiveDownloadDir()
@@ -140,7 +140,7 @@ object DownloadPreparation {
         settings: SettingsManager,
         engine: DownloadEngine,
         options: Options,
-        urlProvider: suspend (Song) -> Result<String>,
+        urlProvider: suspend (Song) -> Result<Pair<String, String>>,
     ): Boolean {
         return try {
             coroutineScope {
@@ -166,7 +166,7 @@ object DownloadPreparation {
                     }
                 }
 
-                val url = urlRequest.await()
+                val (url, format) = urlRequest.await()
                 val lyricPayload = buildLyrics(song, lyricRequest.await(), options)
                 engine.startDownload(
                     songId = song.id,
@@ -176,6 +176,7 @@ object DownloadPreparation {
                     coverUrl = song.coverUrl,
                     url = url,
                     dir = directory,
+                    expectedFormat = format,
                     qualityLabel = options.qualityLabel,
                     cookie = options.cookie,
                     lyrics = lyricPayload.embedded,

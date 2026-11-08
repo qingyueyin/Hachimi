@@ -392,6 +392,56 @@ class DownloadEngineTest {
         }
     }
 
+    @Test
+    fun `expected format overrides missing extension in url`() = runBlocking {
+        val content = ByteArray(32 * 1024) { (it % 251).toByte() }
+        val requests = AtomicInteger()
+        val serverExecutor = Executors.newCachedThreadPool()
+        val server = HttpServer.create(InetSocketAddress(0), 0).apply {
+            executor = serverExecutor
+            // CDN 链接常常没有扩展名，扩展名只能从接口的 type 字段拿
+            createContext("/stream") { exchange -> serveAudio(exchange, content, requests) }
+            start()
+        }
+        val folder = Files.createTempDirectory("hachimi-expected-format").toFile()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val settings = mock(SettingsManager::class.java).apply {
+            `when`(concurrentDownloads).thenReturn(1)
+            `when`(folderNamingFormat).thenReturn(FolderNamingFormat.NONE)
+            `when`(buildFileName("Song", "Artist", "standard", "Album")).thenReturn("song")
+            `when`(enableWriteTags).thenReturn(false)
+        }
+        val engine = DownloadEngine(
+            mock(Context::class.java),
+            settings,
+            scope,
+            mock(DownloadHistoryManager::class.java),
+        )
+
+        try {
+            engine.startDownload(
+                songId = 71,
+                name = "Song",
+                artists = "Artist",
+                album = "Album",
+                url = "http://127.0.0.1:${server.address.port}/stream",
+                dir = folder,
+                qualityLabel = "standard",
+                expectedFormat = "flac",
+            )
+            waitForStatus(engine, DownloadStatus.COMPLETED, requests, songId = 71)
+
+            assertTrue("下载文件应带 .flac 扩展名", File(folder, "song.flac").exists())
+            assertArrayEquals(content, File(folder, "song.flac").readBytes())
+        } finally {
+            engine.removeTask(71)
+            scope.cancel()
+            server.stop(0)
+            serverExecutor.shutdownNow()
+            folder.deleteRecursively()
+        }
+    }
+
     private suspend fun waitForStatus(
         engine: DownloadEngine,
         expected: DownloadStatus,
