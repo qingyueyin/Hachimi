@@ -23,6 +23,7 @@ import com.qing.hachimi.util.UpdateInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
@@ -79,11 +80,6 @@ class MainViewModel(
         val quality = settingsManager.quality
         val dir = if (settingsManager.downloadDir.isNotBlank())
             settingsManager.downloadDir else settingsManager.defaultDownloadDir
-
-        // Check for expired login session
-        if (!cookieManager.invalidateIfExpired()) {
-            AppLogger.info("Login session expired, clearing state")
-        }
 
         _uiState.value = _uiState.value.copy(
             isLoggedIn = cookieManager.isLoggedIn(),
@@ -159,6 +155,7 @@ class MainViewModel(
 
     companion object {
         private const val CHECK_UPDATE_TIMEOUT_MS = 10_000L
+        private const val ANON_TOKEN_TIMEOUT_MS = 15_000L
     }
 
     private fun initAnonymousToken() {
@@ -171,6 +168,20 @@ class MainViewModel(
 
         // Get anonymous token in background on IO dispatcher
         viewModelScope.launch(Dispatchers.IO) {
+            // 看门狗：超时后放行所有等待方。若请求线程被系统挂起，代码永远走不到 finally，
+            // 等待 token 的页面（发现/我的/搜索）会一直空白。
+            val watchdog = launch {
+                try {
+                    withTimeout(ANON_TOKEN_TIMEOUT_MS) {
+                        while (!cookieManager.tokenReady.isCompleted) {
+                            kotlinx.coroutines.delay(200L)
+                        }
+                    }
+                } catch (_: TimeoutCancellationException) {
+                    AppLogger.warn("Anonymous token init timed out, releasing waiters")
+                    cookieManager.signalTokenInitComplete()
+                }
+            }
             try {
                 val result = repository.loginApi().registerAnonimous()
                 if (result != null) {
@@ -186,6 +197,7 @@ class MainViewModel(
             } catch (e: Exception) {
                 AppLogger.error("initAnonymousToken exception", e)
             } finally {
+                watchdog.cancel()
                 cookieManager.signalTokenInitComplete()
             }
         }

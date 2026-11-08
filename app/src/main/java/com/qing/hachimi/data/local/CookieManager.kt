@@ -16,9 +16,10 @@ class CookieManager(context: Context) {
     private val prefs: SharedPreferences = openEncryptedPrefs(context)
 
     // Token readiness tracking to prevent race conditions
-    private var _tokenReady = CompletableDeferred<Unit>()
-    val tokenReady: CompletableDeferred<Unit> get() = _tokenReady
+    private var tokenReadyGate = CompletableDeferred<Unit>()
+    val tokenReady: CompletableDeferred<Unit> get() = tokenReadyGate
     private var _tokenInitStarted = false
+
 
     companion object {
         private const val TAG = "CookieManager"
@@ -27,9 +28,7 @@ class CookieManager(context: Context) {
             "os", "osver", "deviceId", "appver", "versioncode", "mobilename",
             "buildver", "resolution", "channel"
         )
-        private val COOKIE_NAME_REGEX = Regex("^[!#${'$'}%&'*+.^_`|~0-9A-Za-z-]+${'$'}")
-        private const val REFRESH_INTERVAL_MS = 3L * 24 * 60 * 60 * 1000
-        private const val EXPIRE_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000
+        private val COOKIE_NAME_REGEX = Regex("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
     }
 
     init {
@@ -46,7 +45,6 @@ class CookieManager(context: Context) {
                 putString("ck_backup_$k", v)
             }
             putStringSet("cookie_keys", cookies.keys)
-            putLong("cookie_time", System.currentTimeMillis())
         }
         AppLogger.info("[Cookie] Saved successfully")
     }
@@ -85,8 +83,18 @@ class CookieManager(context: Context) {
      * All waiting coroutines will be released.
      */
     fun signalTokenInitComplete() {
-        if (!_tokenReady.isCompleted) {
-            _tokenReady.complete(Unit)
+        if (!tokenReadyGate.isCompleted) {
+            tokenReadyGate.complete(Unit)
+        }
+    }
+
+    /**
+     * 重新打开门闩，等待方会等下一轮获取完成后才继续。
+     */
+    fun resetTokenGate() {
+        if (tokenReadyGate.isCompleted) {
+            tokenReadyGate = CompletableDeferred()
+            _tokenInitStarted = false
         }
     }
 
@@ -130,16 +138,6 @@ class CookieManager(context: Context) {
         AppLogger.debug("Anonymous token saved")
     }
 
-    fun needsRefresh(): Boolean {
-        if (!isLoggedIn()) return false
-        val lastTime = prefs.getLong("cookie_time", 0L)
-        if (lastTime == 0L) return false
-        return System.currentTimeMillis() - lastTime > REFRESH_INTERVAL_MS
-    }
-
-    fun touchCookieTime() {
-        prefs.edit { putLong("cookie_time", System.currentTimeMillis()) }
-    }
 
     fun getUserId(): Long = prefs.getLong("user_id", 0L)
 
@@ -156,7 +154,6 @@ class CookieManager(context: Context) {
                 remove("ck_backup_$it")
             }
             remove("cookie_keys")
-            remove("cookie_time")
             remove("user_id")
         }
         AppLogger.debug("Cookies cleared")
@@ -356,7 +353,6 @@ class CookieManager(context: Context) {
                 }
             }
             putStringSet("cookie_keys", legacyKeys)
-            putLong("cookie_time", legacyPrefs.getLong("cookie_time", 0L))
             putLong("user_id", legacyPrefs.getLong("user_id", 0L))
         }
         legacyPrefs.edit {
@@ -365,27 +361,9 @@ class CookieManager(context: Context) {
                 remove("ck_backup_$key")
             }
             remove("cookie_keys")
-            remove("cookie_time")
             remove("user_id")
         }
         AppLogger.info("Migrated cookies to encrypted storage")
     }
 
-    /**
-     * Validates that the current login session is still active.
-     * If the session has expired, cookies are cleared automatically.
-     * Returns true if the session is valid, false otherwise.
-     */
-    fun invalidateIfExpired(): Boolean {
-        if (!isLoggedIn()) return false
-        val lastTime = prefs.getLong("cookie_time", 0L)
-        if (lastTime == 0L) return false
-        // Check if more than 7 days have passed since last activity
-        if (System.currentTimeMillis() - lastTime > EXPIRE_INTERVAL_MS) {
-            clearCookies()
-            AppLogger.warn("Cookies cleared due to expiration (7 days inactive)")
-            return false
-        }
-        return true
-    }
 }
