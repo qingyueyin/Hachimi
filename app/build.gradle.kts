@@ -51,11 +51,12 @@ android {
     defaultConfig {
         applicationId = "com.qingyueyin.hachimi"
         minSdk = 33
-        targetSdk = 33
+        targetSdk = 37
         versionCode = gitCommitCount
         versionName = "$appVersion-$gitHash"
         ndk {
-            abiFilters += listOf("arm64-v8a")
+            // arm64 手机 + x86_64（ChromeOS / 模拟器）
+            abiFilters += listOf("arm64-v8a", "x86_64")
         }
         buildConfigField("String", "GIT_HASH", "\"$gitHash\"")
         buildConfigField("int", "GIT_COMMIT_COUNT", "$gitCommitCount")
@@ -67,6 +68,7 @@ android {
         getByName("debug") {
             applicationIdSuffix = ".debug"
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -75,6 +77,7 @@ android {
         }
         getByName("release") {
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release")
         }
@@ -136,8 +139,8 @@ dependencies {
     implementation(libs.material.kolor)
 
     // Koin DI (following Lyrico architecture)
-    implementation("io.insert-koin:koin-android:3.5.6")
-    implementation("io.insert-koin:koin-androidx-compose:3.5.6")
+    implementation(libs.koin.android)
+    implementation(libs.koin.androidx.compose)
 
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
@@ -148,16 +151,16 @@ dependencies {
     implementation(libs.androidx.security.crypto)
 
     // jaudiotagger: pure Java audio metadata read/write (MP3 ID3v2, FLAC Vorbis Comment + Picture, etc.)
-    implementation("net.jthink:jaudiotagger:3.0.1")
+    implementation(libs.jaudiotagger)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.mockito:mockito-core:5.14.2")
-    testImplementation("org.mockito:mockito-inline:5.2.0")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
-    testImplementation("org.json:json:20240303")
+    testImplementation(libs.junit)
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.mockito.inline)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.json)
 }
 
 fun gitOutput(vararg args: String, fallback: String): String {

@@ -1,6 +1,7 @@
 package com.qing.hachimi.data.local
 
 import android.content.Context
+import androidx.core.content.edit
 import com.qing.hachimi.data.model.UpgradeStatus
 import org.json.JSONArray
 import org.json.JSONObject
@@ -54,7 +55,7 @@ class UpgradeHistoryManager(private val context: Context) {
     }
 
     fun clearRecords() {
-        prefs.edit().remove("records").apply()
+        prefs.edit { remove("records") }
     }
 
     fun isUpgraded(file: File): Boolean {
@@ -78,6 +79,6 @@ class UpgradeHistoryManager(private val context: Context) {
             jsonArray.put(obj)
         }
 
-        prefs.edit().putString("records", jsonArray.toString()).apply()
+        prefs.edit { putString("records", jsonArray.toString()) }
     }
 }

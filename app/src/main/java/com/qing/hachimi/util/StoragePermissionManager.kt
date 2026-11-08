@@ -4,10 +4,10 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import androidx.core.net.toUri
 import java.io.File
 
 /**
@@ -72,7 +72,7 @@ object StoragePermissionManager {
      */
     fun openAllFilesAccessSettings(context: Context): Boolean {
         val appSpecific = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-            data = Uri.parse("package:${context.packageName}")
+            data = "package:${context.packageName}".toUri()
         }
         if (tryStart(context, appSpecific)) return true
 
@@ -80,7 +80,7 @@ object StoragePermissionManager {
         if (tryStart(context, globalList)) return true
 
         val appDetails = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = Uri.parse("package:${context.packageName}")
+            data = "package:${context.packageName}".toUri()
         }
         if (tryStart(context, appDetails)) return true
 

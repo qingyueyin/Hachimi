@@ -166,8 +166,8 @@ fun SectionHeading(title: String, onMore: (() -> Unit)? = null) {
 @Composable
 fun StatusMessage(
     message: String?,
-    onRetry: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    onRetry: (() -> Unit)? = null,
 ) {
     if (message.isNullOrBlank()) return
     val isError = message.contains("失败") || message.contains("超时") || message.contains("异常")
@@ -194,8 +194,8 @@ fun StatusMessage(
 @Composable
 fun ScreenHeading(
     title: String,
-    onRefresh: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    onRefresh: (() -> Unit)? = null,
 ) {
     Row(
         modifier = modifier.fillMaxWidth().height(44.dp),

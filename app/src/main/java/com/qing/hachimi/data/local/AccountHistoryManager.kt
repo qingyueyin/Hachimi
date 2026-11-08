@@ -167,12 +167,13 @@ class AccountHistoryManager(context: Context) {
                     json.encodeToString(accounts)
                 }.getOrDefault("[]")
             }
-            prefs.edit().putString(KEY_ACCOUNTS, valueToStore).commit()
+            prefs.edit(commit = true) { putString(KEY_ACCOUNTS, valueToStore) }
+            true
         } else {
             true
         }
         if (migrated) {
-            legacyPrefs.edit().remove(KEY_ACCOUNTS).commit()
+            legacyPrefs.edit(commit = true) { remove(KEY_ACCOUNTS) }
             AppLogger.info("Migrated account history out of plain storage")
         } else {
             AppLogger.error("Account history migration failed; legacy data retained")

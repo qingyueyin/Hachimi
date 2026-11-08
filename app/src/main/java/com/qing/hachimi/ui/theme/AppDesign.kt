@@ -64,8 +64,8 @@ object AppShapes {
 @Composable
 fun AppChip(
     text: String,
-    selected: Boolean = false,
     modifier: Modifier = Modifier,
+    selected: Boolean = false,
     onClick: () -> Unit,
 ) {
     val colorScheme = MiuixTheme.colorScheme

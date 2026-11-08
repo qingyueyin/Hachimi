@@ -214,9 +214,8 @@ class DownloadEngine(
 
     private fun saveToHistory(task: TaskInfo, file: File) {
         if (!task.persistHistory) return
-        // Allow other apps (e.g. Lyrico) to read/write the downloaded file
-        file.setReadable(true, false)
-        file.setWritable(true, false)
+        // Allow other apps (e.g. Lyrico) to read the downloaded file
+        file.setReadable(true, true)
         // Scan into MediaStore so the file is indexed and accessible by other apps
         try {
             android.media.MediaScannerConnection.scanFile(

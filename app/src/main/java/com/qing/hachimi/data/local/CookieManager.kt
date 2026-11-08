@@ -40,14 +40,13 @@ class CookieManager(context: Context) {
         val savedKeys = cookies.keys.filter { it in KEY_COOKIES }
         AppLogger.info("[Cookie] Saving ${cookies.size} cookies, key cookies: $savedKeys")
         AppLogger.debug("[Cookie] MUSIC_U present=${!cookies["MUSIC_U"].isNullOrBlank()}, csrf present=${!cookies["__csrf"].isNullOrBlank()}, os=${cookies["os"]}, appver=${cookies["appver"]}")
-        prefs.edit().apply {
+        prefs.edit {
             cookies.forEach { (k, v) ->
                 putString("ck_$k", v)
                 putString("ck_backup_$k", v)
             }
             putStringSet("cookie_keys", cookies.keys)
             putLong("cookie_time", System.currentTimeMillis())
-            apply()
         }
         AppLogger.info("[Cookie] Saved successfully")
     }
@@ -124,10 +123,9 @@ class CookieManager(context: Context) {
     }
 
     fun saveAnonToken(musicA: String) {
-        prefs.edit().apply {
+        prefs.edit {
             putString("ck_MUSIC_A", musicA)
             putString("ck_backup_MUSIC_A", musicA)
-            apply()
         }
         AppLogger.debug("Anonymous token saved")
     }
@@ -140,19 +138,19 @@ class CookieManager(context: Context) {
     }
 
     fun touchCookieTime() {
-        prefs.edit().putLong("cookie_time", System.currentTimeMillis()).apply()
+        prefs.edit { putLong("cookie_time", System.currentTimeMillis()) }
     }
 
     fun getUserId(): Long = prefs.getLong("user_id", 0L)
 
     fun saveUserId(userId: Long) {
         AppLogger.info("[Cookie] saveUserId: $userId")
-        prefs.edit().putLong("user_id", userId).apply()
+        prefs.edit { putLong("user_id", userId) }
     }
 
     fun clearCookies() {
         val keys = prefs.getStringSet("cookie_keys", emptySet()) ?: return
-        prefs.edit().apply {
+        prefs.edit {
             keys.forEach {
                 remove("ck_$it")
                 remove("ck_backup_$it")
@@ -160,7 +158,6 @@ class CookieManager(context: Context) {
             remove("cookie_keys")
             remove("cookie_time")
             remove("user_id")
-            apply()
         }
         AppLogger.debug("Cookies cleared")
     }

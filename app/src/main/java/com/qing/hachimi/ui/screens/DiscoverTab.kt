@@ -311,8 +311,8 @@ private fun DiscoverHome(
         verticalArrangement = Arrangement.spacedBy(AppSpacing.lg),
     ) {
         item {
-            ScreenHeading("精选推荐", onRefresh)
-            StatusMessage(state.statusMessage, onRetry)
+            ScreenHeading("精选推荐", onRefresh = onRefresh)
+            StatusMessage(state.statusMessage, onRetry = onRetry)
         }
         item { DestinationGrid(onOpen) }
         if (isLoggedIn) {
@@ -586,7 +586,7 @@ private fun DiscoverCategory(
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column {
-                StatusMessage(state.statusMessage, onRetry)
+                StatusMessage(state.statusMessage, onRetry = onRetry)
                 when (state.sourceMode) {
                     SourceMode.PLAYLISTS -> FilterRow(
                         values = PlaylistCategory.entries,
@@ -677,7 +677,7 @@ private fun NewSongsCategory(
         verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
     ) {
         item {
-            StatusMessage(state.statusMessage, onRetry)
+            StatusMessage(state.statusMessage, onRetry = onRetry)
         }
         item {
             FilterRow(
@@ -730,7 +730,7 @@ private fun StyleCategory(
         verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
     ) {
         item {
-            StatusMessage(state.statusMessage, onRetry)
+            StatusMessage(state.statusMessage, onRetry = onRetry)
         }
         if (state.styleTags.isNotEmpty()) {
             item {
@@ -791,7 +791,7 @@ private fun FmCategory(
         verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
     ) {
         item {
-            StatusMessage(state.statusMessage, onRetry)
+            StatusMessage(state.statusMessage, onRetry = onRetry)
         }
         if (state.fmSongs.isNotEmpty()) {
             item { SongControls(state.selectedIds.size, state.fmSongs.size, onSelectAll, onDownload, state.isPreparingDownloads) }
@@ -849,7 +849,7 @@ private fun DiscoverListCategory(
     ) {
         item {
             Column {
-                StatusMessage(state.statusMessage, onRetry)
+                StatusMessage(state.statusMessage, onRetry = onRetry)
                 if (state.sourceMode == SourceMode.ARTISTS) {
                     FilterRow(
                         values = ArtistArea.entries,
@@ -1071,7 +1071,7 @@ private fun ArtistHotSongs(
     ) {
         item {
             ArtistDetailLead(state, onSetSection)
-            StatusMessage(state.statusMessage, onRetry)
+            StatusMessage(state.statusMessage, onRetry = onRetry)
         }
         if (state.isLoading) {
             item { LoadingIndicator("正在加载热门歌曲...") }
@@ -1137,7 +1137,7 @@ private fun ArtistAlbums(
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column {
                 ArtistDetailLead(state, onSetSection)
-                StatusMessage(state.artistSectionMessage, onRetry)
+                StatusMessage(state.artistSectionMessage, onRetry = onRetry)
             }
         }
         items(state.artistDetailAlbums, key = { it.id }) { album ->
@@ -1186,7 +1186,7 @@ private fun ArtistAbout(
     ) {
         item {
             ArtistDetailLead(state, onSetSection)
-            StatusMessage(state.artistSectionMessage, onRetry)
+            StatusMessage(state.artistSectionMessage, onRetry = onRetry)
         }
         if (state.isLoadingArtistAbout) {
             item { LoadingIndicator("正在加载艺人介绍...") }
@@ -1391,7 +1391,7 @@ private fun DiscoverSongDetail(
                 loadedCount = songs.size,
                 loading = state.isLoading,
             )
-            StatusMessage(state.statusMessage, onRetry)
+            StatusMessage(state.statusMessage, onRetry = onRetry)
         }
         if (state.isLoading) {
             item { LoadingIndicator("正在加载...") }
@@ -1444,7 +1444,7 @@ private fun <T> FilterRow(
         horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
     ) {
         items(values) { value ->
-            AppChip(label(value), selected == value) { onSelect(value) }
+            AppChip(label(value), selected = selected == value) { onSelect(value) }
         }
     }
 }

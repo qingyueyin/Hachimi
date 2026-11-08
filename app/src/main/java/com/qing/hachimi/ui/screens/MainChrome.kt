@@ -194,8 +194,8 @@ internal fun TopChromeOverlay(
     backdrop: LayerBackdrop?,
     headerHeight: Dp,
     fadeExtension: Dp,
-    progress: () -> Float = { 1f },
     modifier: Modifier = Modifier,
+    progress: () -> Float = { 1f },
 ) {
     val density = LocalDensity.current
     val surface = colorScheme.surface

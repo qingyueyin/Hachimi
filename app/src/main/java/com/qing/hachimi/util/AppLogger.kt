@@ -26,7 +26,7 @@ object AppLogger {
     private var initialized = false
     private var appContext: Context? = null
 
-    private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
+    private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     private val lock = Any()
 
     /** Current navigation context – set by each screen for richer logs. */
@@ -254,7 +254,7 @@ object AppLogger {
     private fun rotateIfNeeded() {
         val f = logFile ?: return
         if (f.exists() && f.length() > MAX_FILE_SIZE) {
-            val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             f.renameTo(File(logDir, "app_$stamp.log"))
         }
     }

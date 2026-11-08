@@ -265,7 +265,7 @@ private fun MyHome(
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)) {
-                ScreenHeading("我的", onRefresh)
+                ScreenHeading("我的", onRefresh = onRefresh)
                 StatusMessage(state.statusMessage, modifier = Modifier.padding(horizontal = AppSpacing.md))
             }
         }
@@ -348,7 +348,7 @@ private fun HomeGrid(
     ) {
         fullLine {
             Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)) {
-                ScreenHeading("我的", onRefresh)
+                ScreenHeading("我的", onRefresh = onRefresh)
                 StatusMessage(state.statusMessage, modifier = Modifier.padding(horizontal = AppSpacing.md))
             }
         }

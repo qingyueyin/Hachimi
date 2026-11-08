@@ -2,6 +2,7 @@ package com.qing.hachimi.data.local
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import com.qing.hachimi.util.AppLogger
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -39,7 +40,7 @@ class DownloadHistoryManager(context: Context) {
             list.add(0, record)
         }
         val encoded = json.encodeToString(list)
-        prefs.edit().putString(KEY_HISTORY, encoded).apply()
+        prefs.edit { putString(KEY_HISTORY, encoded) }
         AppLogger.debug("DownloadHistory: saved record for songId=${record.songId}, total=${list.size}")
     }
 
@@ -48,7 +49,7 @@ class DownloadHistoryManager(context: Context) {
         val removed = list.removeAll { it.songId == songId }
         if (removed) {
             val encoded = json.encodeToString(list)
-            prefs.edit().putString(KEY_HISTORY, encoded).apply()
+            prefs.edit { putString(KEY_HISTORY, encoded) }
             AppLogger.debug("DownloadHistory: removed songId=$songId, remaining=${list.size}")
         }
     }
@@ -64,7 +65,7 @@ class DownloadHistoryManager(context: Context) {
     }
 
     fun clear() {
-        prefs.edit().remove(KEY_HISTORY).apply()
+        prefs.edit { remove(KEY_HISTORY) }
         AppLogger.debug("DownloadHistory: cleared")
     }
 

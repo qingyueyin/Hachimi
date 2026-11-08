@@ -33,20 +33,20 @@ class SettingsManager(context: Context) {
 
     var quality: String
         get() = prefs.getString("quality", "exhigh") ?: "exhigh"
-        set(value) = prefs.edit().putString("quality", value).apply()
+        set(value) = prefs.edit { putString("quality", value) }
 
     var downloadDir: String
         get() = prefs.getString("download_dir", "") ?: ""
-        set(value) = prefs.edit().putString("download_dir", value).apply()
+        set(value) = prefs.edit { putString("download_dir", value) }
 
     /** 免责声明是否已确认（首次启动弹窗用） */
     var disclaimerAccepted: Boolean
         get() = prefs.getBoolean("disclaimer_accepted", false)
-        set(value) = prefs.edit().putBoolean("disclaimer_accepted", value).apply()
+        set(value) = prefs.edit { putBoolean("disclaimer_accepted", value) }
 
     var unofficialBuildWarningDismissed: Boolean
         get() = prefs.getBoolean("unofficial_build_warning_dismissed", false)
-        set(value) = prefs.edit().putBoolean("unofficial_build_warning_dismissed", value).apply()
+        set(value) = prefs.edit { putBoolean("unofficial_build_warning_dismissed", value) }
 
     fun getEffectiveDownloadDir(): File {
         val dir = downloadDir
@@ -72,19 +72,19 @@ class SettingsManager(context: Context) {
                 ?: NamingFormat.SONG_ARTIST.name
             return try { NamingFormat.valueOf(name) } catch (_: Exception) { NamingFormat.SONG_ARTIST }
         }
-        set(value) = prefs.edit().putString("naming_format", value.name).apply()
+        set(value) = prefs.edit { putString("naming_format", value.name) }
 
     var concurrentDownloads: Int
         get() = prefs.getInt("concurrent_downloads", 3)
-        set(value) = prefs.edit().putInt("concurrent_downloads", value.coerceIn(1, 5)).apply()
+        set(value) = prefs.edit { putInt("concurrent_downloads", value.coerceIn(1, 5)) }
 
     var fuckAiMode: Boolean
         get() = prefs.getBoolean("fuck_ai_mode", false)
-        set(value) = prefs.edit().putBoolean("fuck_ai_mode", value).apply()
+        set(value) = prefs.edit { putBoolean("fuck_ai_mode", value) }
 
     var downloadLyrics: Boolean
         get() = prefs.getBoolean("download_lyrics", true)
-        set(value) = prefs.edit().putBoolean("download_lyrics", value).apply()
+        set(value) = prefs.edit { putBoolean("download_lyrics", value) }
 
     // --- Playlist Folder ---
     var folderNamingFormat: FolderNamingFormat
@@ -93,45 +93,45 @@ class SettingsManager(context: Context) {
                 ?: FolderNamingFormat.NONE.name
             return try { FolderNamingFormat.valueOf(name) } catch (_: Exception) { FolderNamingFormat.NONE }
         }
-        set(value) = prefs.edit().putString("folder_naming_format", value.name).apply()
+        set(value) = prefs.edit { putString("folder_naming_format", value.name) }
 
     // Legacy: kept for backward compatibility with old migrations
     var createPlaylistFolder: Boolean
         get() = folderNamingFormat != FolderNamingFormat.NONE
-        set(value) = prefs.edit().putString("folder_naming_format", if (value) FolderNamingFormat.PLAYLIST_NAME.name else FolderNamingFormat.NONE.name).apply()
+        set(value) = prefs.edit { putString("folder_naming_format", if (value) FolderNamingFormat.PLAYLIST_NAME.name else FolderNamingFormat.NONE.name) }
 
     var enableWriteTags: Boolean
         get() = prefs.getBoolean("enable_write_tags", false)
-        set(value) = prefs.edit().putBoolean("enable_write_tags", value).apply()
+        set(value) = prefs.edit { putBoolean("enable_write_tags", value) }
 
     var embedLyrics: Boolean
         get() = prefs.getBoolean("embed_lyrics", true)
-        set(value) = prefs.edit().putBoolean("embed_lyrics", value).apply()
+        set(value) = prefs.edit { putBoolean("embed_lyrics", value) }
 
     var saveTlLrc: Boolean
         get() = prefs.getBoolean("save_tl_lrc", false)
-        set(value) = prefs.edit().putBoolean("save_tl_lrc", value).apply()
+        set(value) = prefs.edit { putBoolean("save_tl_lrc", value) }
 
     var saveRomaLrc: Boolean
         get() = prefs.getBoolean("save_roma_lrc", false)
-        set(value) = prefs.edit().putBoolean("save_roma_lrc", value).apply()
+        set(value) = prefs.edit { putBoolean("save_roma_lrc", value) }
 
     var saveYrc: Boolean
         get() = prefs.getBoolean("save_yrc", false)
-        set(value) = prefs.edit().putBoolean("save_yrc", value).apply()
+        set(value) = prefs.edit { putBoolean("save_yrc", value) }
 
     var customNamingTemplate: String
         get() = prefs.getString("custom_naming_template", "") ?: ""
-        set(value) = prefs.edit().putString("custom_naming_template", value).apply()
+        set(value) = prefs.edit { putString("custom_naming_template", value) }
 
     var artistDelimiter: String
         get() = prefs.getString("artist_delimiter", "/") ?: "/"
-        set(value) = prefs.edit().putString("artist_delimiter", value.replace("\\", "/")).apply()
+        set(value) = prefs.edit { putString("artist_delimiter", value.replace("\\", "/")) }
 
     // --- Album Grouping ---
     var albumGrouping: Boolean
         get() = prefs.getBoolean("album_grouping", false)
-        set(value) = prefs.edit().putBoolean("album_grouping", value).apply()
+        set(value) = prefs.edit { putBoolean("album_grouping", value) }
 
     // --- Search History ---
     var searchHistory: List<String>
@@ -141,7 +141,7 @@ class SettingsManager(context: Context) {
             ?.distinct()
             ?.take(20)
             ?: emptyList()
-        set(value) = prefs.edit().putString("search_history", value.take(20).joinToString("\n")).apply()
+        set(value) = prefs.edit { putString("search_history", value.take(20).joinToString("\n")) }
 
     // --- Grid Columns (per page) ---
     private fun gridColumnsKey(page: String) = "grid_columns_$page"
@@ -154,7 +154,7 @@ class SettingsManager(context: Context) {
         prefs.getInt(gridColumnsKey(page), 2).coerceIn(1, 4)
 
     fun setGridColumns(page: String, value: Int) =
-        prefs.edit().putInt(gridColumnsKey(page), value.coerceIn(1, 4)).apply()
+        prefs.edit { putInt(gridColumnsKey(page), value.coerceIn(1, 4)) }
 
     object GridPage {
         const val DEFAULT = "default"
@@ -165,27 +165,27 @@ class SettingsManager(context: Context) {
 
     var themeColorMode: Int
         get() = prefs.getInt("theme_color_mode", 5)
-        set(value) = prefs.edit().putInt("theme_color_mode", value).apply()
+        set(value) = prefs.edit { putInt("theme_color_mode", value) }
 
     var themeKeyColor: Int
         get() = prefs.getInt("theme_key_color", 0)
-        set(value) = prefs.edit().putInt("theme_key_color", value).apply()
+        set(value) = prefs.edit { putInt("theme_key_color", value) }
 
     var themePaletteStyle: String
         get() = prefs.getString("theme_palette_style", "TonalSpot") ?: "TonalSpot"
-        set(value) = prefs.edit().putString("theme_palette_style", value).apply()
+        set(value) = prefs.edit { putString("theme_palette_style", value) }
 
     var themeColorSpec: String
         get() = prefs.getString("theme_color_spec", "SPEC_2025") ?: "SPEC_2025"
-        set(value) = prefs.edit().putString("theme_color_spec", value).apply()
+        set(value) = prefs.edit { putString("theme_color_spec", value) }
 
     var blurEffect: Boolean
         get() = prefs.getBoolean("blur_effect", true)
-        set(value) = prefs.edit().putBoolean("blur_effect", value).apply()
+        set(value) = prefs.edit { putBoolean("blur_effect", value) }
 
     var liquidGlass: Boolean
         get() = prefs.getBoolean("liquid_glass", false)
-        set(value) = prefs.edit().putBoolean("liquid_glass", value).apply()
+        set(value) = prefs.edit { putBoolean("liquid_glass", value) }
 
     var floatingNavigationBar: Boolean
         get() = prefs.getBoolean("floating_navigation_bar", true)
@@ -193,7 +193,7 @@ class SettingsManager(context: Context) {
 
     var navigationRailExpanded: Boolean
         get() = prefs.getBoolean("navigation_rail_expanded", false)
-        set(value) = prefs.edit().putBoolean("navigation_rail_expanded", value).apply()
+        set(value) = prefs.edit { putBoolean("navigation_rail_expanded", value) }
 
     fun getFilteredQualityKeys(): List<String> {
         val aiQualities = setOf("jymaster", "sky", "jyeffect")

@@ -3,6 +3,7 @@ package com.qing.hachimi.data.local
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Base64
+import androidx.core.content.edit
 import com.qing.hachimi.data.api.ChartInfo
 import com.qing.hachimi.data.api.CloudApi
 import com.qing.hachimi.data.api.PlaylistApi
@@ -42,9 +43,9 @@ class DiscoveryCacheManager(context: Context) {
     // ── Fingerprint get/set ──
 
     private fun getFingerprint(key: String): String = prefs.getString("fp_$key", "") ?: ""
-    private fun setFingerprint(key: String, fp: String) = prefs.edit().putString("fp_$key", fp).apply()
+    private fun setFingerprint(key: String, fp: String) = prefs.edit { putString("fp_$key", fp) }
     private fun getTimestamp(key: String): Long = prefs.getLong("ts_$key", 0L)
-    private fun setTimestamp(key: String, ts: Long) = prefs.edit().putLong("ts_$key", ts).apply()
+    private fun setTimestamp(key: String, ts: Long) = prefs.edit { putLong("ts_$key", ts) }
 
     /**
      * 压缩 JSON 字符串为 Base64 编码的 GZIP 数据
@@ -79,14 +80,13 @@ class DiscoveryCacheManager(context: Context) {
     }
 
     private fun getJson(key: String): String? = decompress(prefs.getString("json_$key", null))
-    private fun setJson(key: String, json: String) = prefs.edit().putString("json_$key", compress(json)).apply()
+    private fun setJson(key: String, json: String) = prefs.edit { putString("json_$key", compress(json)) }
 
     private fun saveWithFingerprint(key: String, fp: String, json: String) {
-        prefs.edit().apply {
+        prefs.edit {
             putString("fp_$key", fp)
             putLong("ts_$key", System.currentTimeMillis())
             putString("json_$key", compress(json))
-            apply()
         }
     }
 
@@ -375,6 +375,6 @@ class DiscoveryCacheManager(context: Context) {
     // ── Clear ──
 
     fun clearAll() {
-        prefs.edit().clear().apply()
+        prefs.edit { clear() }
     }
 }

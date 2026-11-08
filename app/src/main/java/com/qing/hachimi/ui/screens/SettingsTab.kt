@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import com.qing.hachimi.ui.theme.ColorMode
 import com.qing.hachimi.util.OfficialBuild
 import top.yukonga.miuix.kmp.basic.Card
@@ -776,7 +776,7 @@ fun AboutSettingsScreen(
                         },
                         onClick = {
                             context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(OfficialBuild.RELEASES_URL)),
+                                Intent(Intent.ACTION_VIEW, OfficialBuild.RELEASES_URL.toUri()),
                             )
                         },
                     )
@@ -837,7 +837,7 @@ fun AboutSettingsScreen(
                             Button(
                                 onClick = {
                                     context.startActivity(
-                                        Intent(Intent.ACTION_VIEW, Uri.parse(info.downloadUrl))
+                                        Intent(Intent.ACTION_VIEW, info.downloadUrl.toUri())
                                     )
                                     viewModel.dismissUpdateDialog()
                                 }

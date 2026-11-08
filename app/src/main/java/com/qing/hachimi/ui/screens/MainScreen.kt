@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -102,7 +103,7 @@ fun MainScreen(
     var showCookieDialog by remember { mutableStateOf(false) }
     var cookieInput by remember { mutableStateOf("") }
     var cookieError by remember { mutableStateOf<String?>(null) }
-    var loginMode by remember { mutableStateOf(0) } // 0 = MUSIC_U, 1 = 完整Cookie
+    var loginMode by remember { mutableIntStateOf(0) } // 0 = MUSIC_U, 1 = 完整Cookie
     var showPermissionDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
     var exportedData by remember { mutableStateOf<String>("") }
@@ -564,8 +565,8 @@ fun MainScreen(
                     backdrop = backdrop.takeIf { uiState.blurEffect },
                     headerHeight = if (showContextHeader) 44.dp else AppSpacing.sm,
                     fadeExtension = if (showContextHeader) 96.dp else 56.dp,
-                    progress = topChromeProgress,
                     modifier = Modifier.align(Alignment.TopCenter),
+                    progress = topChromeProgress,
                 )
             }
         }
@@ -677,7 +678,7 @@ fun MainScreen(
                     settingsManager.unofficialBuildWarningDismissed = true
                     showUnofficialWarning = false
                     context.startActivity(
-                        Intent(Intent.ACTION_VIEW, android.net.Uri.parse(OfficialBuild.RELEASES_URL)),
+                        Intent(Intent.ACTION_VIEW, OfficialBuild.RELEASES_URL.toUri()),
                     )
                 },
             ) {
