@@ -5,7 +5,6 @@ import com.qing.hachimi.data.local.AccountHistoryManager
 import com.qing.hachimi.data.local.CookieManager
 import com.qing.hachimi.data.local.DiscoveryCacheManager
 import com.qing.hachimi.data.local.DownloadHistoryManager
-import com.qing.hachimi.data.local.SeenManager
 import com.qing.hachimi.data.local.SettingsManager
 import com.qing.hachimi.data.local.UpgradeHistoryManager
 import com.qing.hachimi.data.repository.NeteaseRepository
@@ -57,7 +56,6 @@ val appModule = module {
     single { CookieManager(androidContext()) }
     single { SettingsManager(androidContext()) }
     single { DownloadHistoryManager(androidContext()) }
-    single { SeenManager(androidContext()) }
     single { DiscoveryCacheManager(androidContext()) }
     single { UpgradeHistoryManager(androidContext()) }
 
@@ -107,13 +105,12 @@ val appModule = module {
             cookieManager = get(),
             downloadEngine = get(),
             settingsManager = get(),
-            seenManager = get(),
             discoveryCache = get(),
             accountHistory = get(),
             okHttpClient = get()
         )
     }
-    viewModel { DiscoverViewModel(repository = get(), cookieManager = get(), settingsManager = get(), discoveryCache = get(), seenManager = get(), downloadEngine = get()) }
+    viewModel { DiscoverViewModel(repository = get(), cookieManager = get(), settingsManager = get(), discoveryCache = get(), downloadEngine = get()) }
     viewModel { SearchViewModel(repository = get(), cookieManager = get(), settingsManager = get(), downloadEngine = get()) }
     viewModel { MyViewModel(repository = get(), cookieManager = get(), settingsManager = get(), downloadEngine = get(), discoveryCache = get()) }
     viewModel { UpgradeViewModel(get(), get()) }

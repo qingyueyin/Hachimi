@@ -7,8 +7,6 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.*
-import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -69,11 +67,36 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+// ═════════════════════════════════════════════════════════════════════════════
+// 页面容器
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 页面底色容器。
+ *
+ * NavDisplay 会把返回栈里的上一页留在下面继续渲染，页面自身如果透明，
+ * 下层内容会直接透出来（文字压在封面上那种）。所有会被 push 的页面都要套一层。
+ */
+@Composable
+fun PageSurface(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MiuixTheme.colorScheme.surface),
+    ) {
+        content()
+    }
+}
+
 @Composable
 fun SecondaryPageHeader(
     title: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    titleAlpha: () -> Float = { 1f },
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -96,7 +119,7 @@ fun SecondaryPageHeader(
         Spacer(Modifier.width(8.dp))
         Text(
             text = title,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).graphicsLayer { alpha = titleAlpha().coerceIn(0f, 1f) },
             style = MiuixTheme.textStyles.title2,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
@@ -110,6 +133,64 @@ fun SecondaryPageHeader(
 // 页面大标题（首页/一级页面标题，与 44dp 标题栏高度对齐）
 // ═════════════════════════════════════════════════════════════════════════════
 
+/**
+ * 区块标题 + 可选「查看全部」。
+ * 发现页与我的页原先各有一份，行为一致。
+ */
+@Composable
+fun SectionHeading(title: String, onMore: (() -> Unit)? = null) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            title,
+            modifier = Modifier.weight(1f),
+            style = MiuixTheme.textStyles.title3,
+            fontWeight = FontWeight.SemiBold,
+        )
+        if (onMore != null) {
+            Text(
+                "查看全部",
+                modifier = Modifier
+                    .clickable(onClick = onMore)
+                    .padding(horizontal = AppSpacing.sm, vertical = AppSpacing.xs),
+                color = colorScheme.primary,
+                style = MiuixTheme.textStyles.body2,
+            )
+        }
+    }
+}
+
+/**
+ * 状态提示行。出错时（失败/超时/异常）显示「重试」。
+ * 发现页与我的页原先各有一份，合并后由调用方通过 modifier 控制外边距。
+ */
+@Composable
+fun StatusMessage(
+    message: String?,
+    onRetry: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    if (message.isNullOrBlank()) return
+    val isError = message.contains("失败") || message.contains("超时") || message.contains("异常")
+    Row(
+        modifier = modifier.fillMaxWidth().padding(vertical = AppSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            message,
+            modifier = Modifier.weight(1f),
+            color = if (isError) colorScheme.error else colorScheme.onSurfaceVariantActions,
+            style = MiuixTheme.textStyles.body2,
+        )
+        if (isError && onRetry != null) {
+            Text(
+                "重试",
+                modifier = Modifier.clickable(onClick = onRetry).padding(AppSpacing.sm),
+                color = colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
 @Composable
 fun ScreenHeading(
     title: String,
@@ -422,46 +503,6 @@ private fun formatCollectionDate(timestamp: Long): String {
     if (timestamp <= 0) return ""
     return SimpleDateFormat("yyyy.MM.dd", Locale.getDefault()).format(Date(timestamp))
 }
-
-// ═════════════════════════════════════════════════════════════════════════════
-// ═════════════════════════════════════════════════════════════════════════════
-// Album List Header
-// ═════════════════════════════════════════════════════════════════════════════
-
-@Composable
-fun AlbumListHeader(
-    albumName: String,
-    songCount: Int
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(80.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(colorScheme.surfaceVariant)
-        )
-        Spacer(Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = albumName,
-                style = MiuixTheme.textStyles.title3,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = "$songCount 首歌曲",
-                style = MiuixTheme.textStyles.main,
-                color = colorScheme.onSurfaceVariantActions
-            )
-        }
-    }
-}
-
 // ═════════════════════════════════════════════════════════════════════════════
 // Song List Item (with checkbox + download status)
 // ═════════════════════════════════════════════════════════════════════════════
@@ -543,167 +584,6 @@ fun SongListItem(
         }
     }
 }
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Simple Song Item (no checkbox, for album details)
-// ═════════════════════════════════════════════════════════════════════════════
-
-@Composable
-fun SimpleSongItem(
-    song: Song,
-    progress: DownloadProgress?
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(AppShapes.small)
-            .background(colorScheme.surfaceVariant)
-            .padding(10.dp)
-            .directionalEntrance(song.id),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        val placeholderPainter = painterResource(R.drawable.ic_music_placeholder)
-        val coverModel = coverDisplayUrl(song.coverUrl, CoverRequestSize.ROW).takeUnless { it.isBlank() }
-
-        AsyncImage(
-            model = coverModel,
-            contentDescription = null,
-            modifier = Modifier
-                .size(40.dp)
-                .clip(AppShapes.small),
-            contentScale = ContentScale.Crop,
-            placeholder = placeholderPainter,
-            error = placeholderPainter
-        )
-        Spacer(Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = song.name,
-                style = MiuixTheme.textStyles.body1,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = "${song.artists} · ${song.album}",
-                color = colorScheme.onSurfaceVariantActions,
-                style = MiuixTheme.textStyles.body2,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Song Row Item (simple list, no checkbox)
-// ═════════════════════════════════════════════════════════════════════════════
-
-@Composable
-fun SongRowItem(
-    song: Song,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth().directionalEntrance(song.id),
-        colors = CardDefaults.defaultColors(color = colorScheme.surfaceVariant)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onClick() }
-                .padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val placeholder = painterResource(R.drawable.ic_music_placeholder)
-            AsyncImage(
-                model = coverDisplayUrl(song.coverUrl, CoverRequestSize.ROW).takeUnless { it.isBlank() },
-                contentDescription = null,
-                modifier = Modifier.size(44.dp).clip(AppShapes.small),
-                contentScale = ContentScale.Crop,
-                placeholder = placeholder,
-                error = placeholder
-            )
-            Spacer(Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = song.name,
-                    style = MiuixTheme.textStyles.body1,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "${song.artists} · ${song.album}",
-                    color = colorScheme.onSurfaceVariantActions,
-                    style = MiuixTheme.textStyles.body2,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Album List Item
-// ═════════════════════════════════════════════════════════════════════════════
-
-@Composable
-fun AlbumListItem(
-    album: AlbumResult,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth().directionalEntrance(album.id),
-        colors = CardDefaults.defaultColors(color = colorScheme.surfaceVariant)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onClick() }
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val placeholder = painterResource(R.drawable.ic_music_placeholder)
-            val cover = coverDisplayUrl(album.coverUrl, CoverRequestSize.LIST).takeUnless { it.isBlank() }
-
-            AsyncImage(
-                model = cover,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(AppShapes.small),
-                contentScale = ContentScale.Crop,
-                placeholder = placeholder,
-                error = placeholder
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = album.name,
-                    style = MiuixTheme.textStyles.body1,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = album.artist,
-                    color = colorScheme.onSurfaceVariantActions,
-                    style = MiuixTheme.textStyles.body2,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Icon(
-                        imageVector = MiuixIcons.ChevronForward,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = colorScheme.primary,
-                    )
-        }
-    }
-}
-
 // ═════════════════════════════════════════════════════════════════════════════
 // Album Card (for search results)
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1060,20 +940,6 @@ fun LoadingIndicator(text: String = "加载中...") {
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
-fun DiscoveryLandingEmptyState() {
-    Box(
-        modifier = Modifier.fillMaxWidth().height(140.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "选择上方入口开始发现音乐",
-            color = colorScheme.onSurfaceVariantActions,
-            style = MiuixTheme.textStyles.body2
-        )
-    }
-}
-
-@Composable
 fun SearchLandingEmptyState() {
     Box(
         modifier = Modifier.fillMaxWidth().height(160.dp),
@@ -1084,19 +950,6 @@ fun SearchLandingEmptyState() {
             color = colorScheme.onSurfaceVariantActions,
             style = MiuixTheme.textStyles.body2
         )
-    }
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Chart List Section
-// ═════════════════════════════════════════════════════════════════════════════
-
-fun LazyGridScope.ChartListSection(
-    charts: List<ChartInfo>,
-    onChartClick: (ChartInfo) -> Unit,
-) {
-    items(charts.take(20), key = { it.id }) { chart ->
-        ChartGridCard(chart = chart, onClick = { onChartClick(chart) })
     }
 }
 
@@ -1156,19 +1009,6 @@ fun ChartGridCard(chart: ChartInfo, onClick: () -> Unit) {
                 )
             }
         }
-    }
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// New Albums Section
-// ═════════════════════════════════════════════════════════════════════════════
-
-fun LazyGridScope.NewAlbumsSection(
-    albums: List<AlbumResult>,
-    onAlbumClick: (AlbumResult) -> Unit,
-) {
-    items(albums, key = { it.id }) { album ->
-        AlbumGridCard(album = album, onClick = { onAlbumClick(album) })
     }
 }
 
@@ -1283,107 +1123,7 @@ fun PlaylistListItem(playlist: PlaylistApi.UserPlaylist, onClick: () -> Unit) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Hot Search Section
-// ═════════════════════════════════════════════════════════════════════════════
-
-@Composable
-fun HotSearchSection(
-    keywords: List<Pair<String, Int>>,
-    onKeywordClick: (String) -> Unit
-) {
-    Column {
-        Text(
-            text = "热搜",
-            style = MiuixTheme.textStyles.subtitle,
-            color = colorScheme.primary,
-            modifier = Modifier.padding(bottom = 4.dp)
-        )
-        if (keywords.isEmpty()) {
-            Box(Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
-                Text("暂无热搜", style = MiuixTheme.textStyles.body2)
-            }
-        } else {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                items(keywords.take(10), key = { it.first }) { (keyword, _) ->
-                    AppChip(
-                        text = keyword,
-                        selected = false,
-                        onClick = { onKeywordClick(keyword) }
-                    )
-                }
-            }
-        }
-    }
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// Load More Button
-// ═════════════════════════════════════════════════════════════════════════════
-
-@Composable
-fun LoadMoreButton(isLoading: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        if (isLoading) {
-            Text(
-                text = "加载中...",
-                color = colorScheme.onSurfaceVariantActions,
-                style = MiuixTheme.textStyles.body2
-            )
-        } else {
-            top.yukonga.miuix.kmp.basic.TextButton(text = "加载更多", onClick = onClick)
-        }
-    }
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-
-// ================================================================
-// Personal FM Section
-// ================================================================
-@Composable
-fun PersonalFmSection(
-    songs: List<Song>,
-    groupCount: Int,
-    isLoading: Boolean,
-    onLoadNext: () -> Unit,
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text("Private FM", style = MiuixTheme.textStyles.subtitle, color = colorScheme.primary, modifier = Modifier.padding(bottom = 4.dp))
-        if (isLoading && songs.isEmpty()) {
-            LoadingIndicator(text = "Loading...")
-        } else if (songs.isEmpty()) {
-            Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
-                Text("Tap button to start", style = MiuixTheme.textStyles.body2)
-            }
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                var currentGroup = 1
-                var songIndex = 0
-                while (songIndex < songs.size) {
-                    if (groupCount > 1) {
-                        Text("Group $currentGroup", style = MiuixTheme.textStyles.body2, color = colorScheme.onSurfaceVariantActions, modifier = Modifier.padding(vertical = 4.dp))
-                    }
-                    val end = minOf(songIndex + 10, songs.size)
-                    for (i in songIndex until end) {
-                        SongRowItem(song = songs[i], onClick = {})
-                    }
-                    songIndex = end
-                    currentGroup++
-                }
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Button(onClick = onLoadNext, enabled = !isLoading, modifier = Modifier.fillMaxWidth()) {
-            Text(if (songs.isEmpty()) "Start FM" else "Next Group")
-        }
-    }
-}// Search Input Bar
+// Search Input Bar
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable

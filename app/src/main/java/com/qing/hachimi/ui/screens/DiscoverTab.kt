@@ -1,6 +1,15 @@
 package com.qing.hachimi.ui.screens
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateListOf
+import com.qing.hachimi.ui.navigation.NavKey2
+import com.qing.hachimi.ui.navigation.syncNavStack
+import top.yukonga.miuix.kmp.nav.core.NavDisplay
+import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
+import top.yukonga.miuix.kmp.nav.core.NavKey
+import top.yukonga.miuix.kmp.nav.core.rememberNavSystemCornerRadius
+import top.yukonga.miuix.kmp.nav.transition.NavTransitions
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -99,8 +108,6 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.window.WindowListPopup
 
-private enum class DiscoverLevel { HOME, CATEGORY, DETAIL }
-
 private data class DiscoverDestination(
     val label: String,
     val mode: SourceMode,
@@ -127,6 +134,7 @@ fun DiscoverTab(
     uiState: DiscoverUiState,
     isLoggedIn: Boolean,
     downloadProgress: Map<Long, DownloadProgress>,
+    onBack: () -> Unit = {},
     onToggleSelect: (Long) -> Unit,
     onSelectAll: () -> Unit,
     onDownload: () -> Unit = {},
@@ -154,29 +162,34 @@ fun DiscoverTab(
     scrollToTopTrigger: Int = 0,
 ) {
     val horizontalDirection = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1 else -1
-    val level = when {
-        uiState.isDetailView || uiState.isLoading -> DiscoverLevel.DETAIL
-        uiState.sourceMode == SourceMode.RECOMMEND -> DiscoverLevel.HOME
-        else -> DiscoverLevel.CATEGORY
-    }
+    val level = uiState.currentLevel
+    // 一级页和二级页各用固定的顶部内边距，切页时内容不会跟着顶栏一起重排
+    val primaryPadding = stablePagePadding(innerPadding, contextPage = false)
+    val contextPadding = stablePagePadding(innerPadding, contextPage = true)
     val sortedSongs = remember(uiState.songs, sortOption, sortAscending) {
         uiState.songs.sortedByOption(sortOption, sortAscending)
     }
-    val suppressNav = LocalSuppressNavTransition.current
-    AnimatedContent(
-        targetState = level,
+    // 导航栈由 ViewModel 持有；这里只负责把它映射成 NavDisplay 需要的可变列表。
+    // 返回手势（含预测性返回的拖动预览）、页面位移缩放与圆角裁剪由 NavDisplay 提供。
+    // NavDisplay 不允许空栈，首帧先用当前层级预填，之后由 LaunchedEffect 同步
+    val navStack = remember {
+        mutableStateListOf<NavKey>().apply { addAll(uiState.levelStack.mapIndexed { i, lvl -> lvl.toNavKey(uiState, i) }) }
+    }
+    LaunchedEffect(uiState.levelStack) {
+        syncNavStack(navStack, uiState.levelStack.mapIndexed { i, lvl -> lvl.toNavKey(uiState, i) })
+    }
+    NavDisplay(
+        backStack = navStack,
         modifier = Modifier.fillMaxSize(),
-        transitionSpec = {
-            hierarchicalNavigationTransition(
-                isForward = targetState.ordinal > initialState.ordinal,
-                layoutDirection = horizontalDirection,
-                suppress = suppressNav,
-            )
-        },
-        label = "DiscoverLevel",
-    ) { target ->
-        when (target) {
-            DiscoverLevel.HOME -> DiscoverHome(
+        onBack = onBack,
+        transition = NavTransitions.MiuixDefault,
+        effects = NavDisplayEffects(
+            cornerClipRadius = rememberNavSystemCornerRadius(),
+            dimAmount = 0.5f,
+        ),
+    ) {
+        entry<NavKey2.DiscoverHome> {
+            DiscoverHome(
                 state = uiState,
                 isLoggedIn = isLoggedIn,
                 onOpen = onSetSourceMode,
@@ -188,79 +201,77 @@ fun DiscoverTab(
                 onAlbumClick = onAlbumClick,
                 onRefresh = onRefresh,
                 onRetry = onRetry,
-                innerPadding = innerPadding,
+                innerPadding = primaryPadding,
                 scrollToTopTrigger = scrollToTopTrigger,
             )
-            DiscoverLevel.CATEGORY -> DiscoverCategory(
-                state = uiState,
-                downloadProgress = downloadProgress,
-                onToggleSelect = onToggleSelect,
-                onSelectAll = onSelectAll,
-                onDownload = onDownload,
-                onChartClick = onChartClick,
-                onPlaylistClick = onPlaylistClick,
-                onPodcastClick = onPodcastClick,
-                onArtistClick = onArtistClick,
-                onAlbumClick = onAlbumClick,
-                onSetPlaylistCategory = onSetPlaylistCategory,
-                onSetArtistArea = onSetArtistArea,
-                onSetNewSongsArea = onSetNewSongsArea,
-                onSelectStyleTag = onSelectStyleTag,
-                onLoadMore = onLoadMore,
-                onLoadNextFmGroup = onLoadNextFmGroup,
-                onRefresh = onRefresh,
-                onRetry = onRetry,
-                innerPadding = innerPadding,
-            )
-            DiscoverLevel.DETAIL -> {
-                val detailKey = if (uiState.isArtistPage) {
-                    "artist:${uiState.activeArtist?.id}"
+        }
+        entry<NavKey2.DiscoverCategory> {
+            PageSurface {
+                DiscoverCategory(
+                    state = uiState,
+                    downloadProgress = downloadProgress,
+                    onToggleSelect = onToggleSelect,
+                    onSelectAll = onSelectAll,
+                    onDownload = onDownload,
+                    onChartClick = onChartClick,
+                    onPlaylistClick = onPlaylistClick,
+                    onPodcastClick = onPodcastClick,
+                    onArtistClick = onArtistClick,
+                    onAlbumClick = onAlbumClick,
+                    onSetPlaylistCategory = onSetPlaylistCategory,
+                    onSetArtistArea = onSetArtistArea,
+                    onSetNewSongsArea = onSetNewSongsArea,
+                    onSelectStyleTag = onSelectStyleTag,
+                    onLoadMore = onLoadMore,
+                    onLoadNextFmGroup = onLoadNextFmGroup,
+                    onRefresh = onRefresh,
+                    onRetry = onRetry,
+                    innerPadding = contextPadding,
+                )
+            }
+        }
+        entry<NavKey2.DiscoverSongList> {
+            PageSurface {
+                if (uiState.isArtistPage) {
+                    ArtistDetailPage(
+                        state = uiState,
+                        songs = sortedSongs,
+                        downloadProgress = downloadProgress,
+                        onToggleSelect = onToggleSelect,
+                        onSelectAll = onSelectAll,
+                        onDownload = onDownload,
+                        onAlbumClick = onAlbumClick,
+                        onArtistClick = onArtistClick,
+                        onSetSection = onSetArtistDetailSection,
+                        onLoadMore = onLoadMoreArtistSection,
+                        onRetry = onRetry,
+                        innerPadding = contextPadding,
+                    )
                 } else {
-                    val detail = uiState.collectionDetail
-                    if (detail != null) "songs:${detail.kind.name}:${detail.id}"
-                    else "songs:${uiState.playlistName}"
-                }
-                AnimatedContent(
-                    targetState = detailKey,
-                    modifier = Modifier.fillMaxSize(),
-                    transitionSpec = {
-                        peerContentTransition()
-                    },
-                    label = "DiscoverDetail",
-                ) { key ->
-                    if (key.startsWith("artist:")) {
-                        ArtistDetailPage(
-                            state = uiState,
-                            songs = sortedSongs,
-                            downloadProgress = downloadProgress,
-                            onToggleSelect = onToggleSelect,
-                            onSelectAll = onSelectAll,
-                            onDownload = onDownload,
-                            onAlbumClick = onAlbumClick,
-                            onArtistClick = onArtistClick,
-                            onSetSection = onSetArtistDetailSection,
-                            onLoadMore = onLoadMoreArtistSection,
-                            onRetry = onRetry,
-                            innerPadding = innerPadding,
-                        )
-                    } else {
-                        DiscoverSongDetail(
-                            state = uiState,
-                            songs = sortedSongs,
-                            downloadProgress = downloadProgress,
-                            onToggleSelect = onToggleSelect,
-                            onSelectAll = onSelectAll,
-                            onDownload = onDownload,
-                            onLoadMoreDetail = onLoadMoreDetail,
-                            onRetry = onRetry,
-                            innerPadding = innerPadding,
-                            sortKey = "$sortOption:$sortAscending",
-                        )
-                    }
+                    DiscoverSongDetail(
+                        state = uiState,
+                        songs = sortedSongs,
+                        downloadProgress = downloadProgress,
+                        onToggleSelect = onToggleSelect,
+                        onSelectAll = onSelectAll,
+                        onDownload = onDownload,
+                        onLoadMoreDetail = onLoadMoreDetail,
+                        onRetry = onRetry,
+                        innerPadding = contextPadding,
+                        sortKey = sortOption to sortAscending,
+                    )
                 }
             }
         }
     }
+}
+
+/** 把 ViewModel 的层级映射为导航 key；详情层用数据键区分，保证横向切换时重建内容 */
+private fun DiscoverLevel.toNavKey(state: DiscoverUiState, depth: Int = 0): NavKey = when (this) {
+    DiscoverLevel.HOME -> NavKey2.DiscoverHome
+    DiscoverLevel.CATEGORY -> NavKey2.DiscoverCategory(state.sourceMode)
+    // depth 只用于保证同一栈里两个详情 entry 的 key 不同（标题不参与显示）
+    DiscoverLevel.DETAIL -> NavKey2.DiscoverSongList(state.sourceMode, state.detailKey, depth)
 }
 
 @OptIn(ExperimentalScrollBarApi::class)
@@ -982,7 +993,7 @@ private fun ArtistListItem(artist: ArtistResult, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ArtistDetailPage(
+internal fun ArtistDetailPage(
     state: DiscoverUiState,
     songs: List<com.qing.hachimi.data.model.Song>,
     downloadProgress: Map<Long, DownloadProgress>,
@@ -1418,44 +1429,6 @@ private fun DiscoverSongDetail(
     )
     }
 }
-}
-
-@Composable
-private fun SectionHeading(title: String, onMore: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(title, modifier = Modifier.weight(1f), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.SemiBold)
-        Text(
-            "查看全部",
-            modifier = Modifier.clickable(onClick = onMore).padding(horizontal = AppSpacing.sm, vertical = AppSpacing.xs),
-            color = colorScheme.primary,
-            style = MiuixTheme.textStyles.body2,
-        )
-    }
-}
-
-@Composable
-private fun StatusMessage(message: String?, onRetry: () -> Unit) {
-    if (message.isNullOrBlank()) return
-    val isError = message.contains("失败") || message.contains("超时") || message.contains("异常")
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = AppSpacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            message,
-            modifier = Modifier.weight(1f),
-            color = if (isError) colorScheme.error else colorScheme.onSurfaceVariantActions,
-            style = MiuixTheme.textStyles.body2,
-        )
-        if (isError) {
-            Text(
-                "重试",
-                modifier = Modifier.clickable(onClick = onRetry).padding(AppSpacing.sm),
-                color = colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-    }
 }
 
 @Composable

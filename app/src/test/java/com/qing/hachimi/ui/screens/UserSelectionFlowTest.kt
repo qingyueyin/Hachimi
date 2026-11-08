@@ -4,7 +4,6 @@ import com.qing.hachimi.data.api.CloudApi
 import com.qing.hachimi.data.api.ListenDataApi
 import com.qing.hachimi.data.local.CookieManager
 import com.qing.hachimi.data.local.DiscoveryCacheManager
-import com.qing.hachimi.data.local.SeenManager
 import com.qing.hachimi.data.local.SettingsManager
 import com.qing.hachimi.data.model.Song
 import com.qing.hachimi.data.model.SourceMode
@@ -78,6 +77,7 @@ class UserSelectionFlowTest {
         assertDownloadAllPrepares(
             MyUiState(
                 section = MySection.HOME,
+                isPlaylistDetail = true,
                 songs = listOf(song(1, "First"), song(2, "Second")),
                 playlistName = "Playlist",
             ),
@@ -89,6 +89,7 @@ class UserSelectionFlowTest {
         assertDownloadAllPrepares(
             MyUiState(
                 section = MySection.COLLECTED,
+                isPlaylistDetail = true,
                 songs = listOf(song(11, "Collected")),
                 playlistName = "收藏歌单",
             ),
@@ -100,6 +101,7 @@ class UserSelectionFlowTest {
         assertDownloadAllPrepares(
             MyUiState(
                 section = MySection.LIKED,
+                isPlaylistDetail = true,
                 likedSongs = listOf(song(21, "Liked")),
             ),
         )
@@ -110,6 +112,7 @@ class UserSelectionFlowTest {
         assertDownloadAllPrepares(
             MyUiState(
                 section = MySection.CLOUD,
+                isPlaylistDetail = true,
                 cloudSongs = listOf(cloudSong(31, "Cloud")),
             ),
         )
@@ -120,6 +123,7 @@ class UserSelectionFlowTest {
         assertDownloadAllPrepares(
             MyUiState(
                 section = MySection.RANK,
+                isPlaylistDetail = true,
                 rankType = 1,
                 rankWeekEntries = listOf(record(41, "Rank")),
             ),
@@ -131,6 +135,7 @@ class UserSelectionFlowTest {
         assertDownloadAllPrepares(
             MyUiState(
                 section = MySection.COLLECTED_ALBUMS,
+                isPlaylistDetail = true,
                 songs = listOf(song(51, "Album Track")),
                 playlistName = "专辑",
             ),
@@ -176,7 +181,6 @@ class UserSelectionFlowTest {
             cookieManager = cookieManager,
             settingsManager = mock(SettingsManager::class.java),
             discoveryCache = mock(DiscoveryCacheManager::class.java),
-            seenManager = mock(SeenManager::class.java),
             downloadEngine = mock(DownloadEngine::class.java),
         )
         val songs = listOf(song(11, "First"), song(12, "Second"))
@@ -201,7 +205,6 @@ class UserSelectionFlowTest {
             cookieManager = cookieManager,
             settingsManager = mock(SettingsManager::class.java),
             discoveryCache = mock(DiscoveryCacheManager::class.java),
-            seenManager = mock(SeenManager::class.java),
             downloadEngine = mock(DownloadEngine::class.java),
         )
         val myViewModel = MyViewModel(

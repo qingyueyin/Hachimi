@@ -5,7 +5,6 @@ import com.qing.hachimi.data.local.CookieManager
 import com.qing.hachimi.data.local.DiscoveryCacheManager
 import com.qing.hachimi.data.local.FolderNamingFormat
 import com.qing.hachimi.data.local.NamingFormat
-import com.qing.hachimi.data.local.SeenManager
 import com.qing.hachimi.data.local.SettingsManager
 import com.qing.hachimi.data.model.SourceMode
 import com.qing.hachimi.data.repository.NeteaseRepository
@@ -81,7 +80,6 @@ class NavigationUserFlowTest {
             cookieManager = cookies,
             downloadEngine = mock(DownloadEngine::class.java),
             settingsManager = settings,
-            seenManager = mock(SeenManager::class.java),
             discoveryCache = mock(DiscoveryCacheManager::class.java),
             accountHistory = mock(AccountHistoryManager::class.java),
             okHttpClient = mock(okhttp3.OkHttpClient::class.java),

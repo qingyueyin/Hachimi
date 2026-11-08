@@ -2,7 +2,6 @@ package com.qing.hachimi.ui.screens
 
 import com.qing.hachimi.data.local.CookieManager
 import com.qing.hachimi.data.local.DiscoveryCacheManager
-import com.qing.hachimi.data.local.SeenManager
 import com.qing.hachimi.data.local.SettingsManager
 import com.qing.hachimi.data.api.ChartSongsResult
 import com.qing.hachimi.data.model.ArtistArea
@@ -213,6 +212,60 @@ class DiscoverViewModelTest {
         assertEquals(artist, viewModel.uiState.value.activeArtist)
         assertEquals(listOf(hotSong), viewModel.uiState.value.songs)
         assertEquals(null, viewModel.uiState.value.collectionDetail)
+        // 栈也必须回到歌手页这一层：只把状态改回歌手页、栈却退到根层，
+        // 界面上会渲染成一个没有内容的空白页
+        assertEquals(DiscoverLevel.DETAIL, viewModel.uiState.value.currentLevel)
+        assertEquals(2, viewModel.uiState.value.levelStack.size)
+    }
+
+    @Test
+    fun `back from artist opened in artist category goes back to artist category`() = runTest(dispatcher) {
+        val repository = repositoryWithHomeContent()
+        val artist = ArtistResult(id = 48161, name = "Ariana Grande", avatarUrl = "avatar")
+        `when`(repository.getDiscoveryArtists(ArtistArea.HOT, 30, 0))
+            .thenReturn(Result.success(DiscoveryPage(items = listOf(artist), nextOffset = 30, hasMore = false)))
+        `when`(repository.getArtistProfile(artist.id)).thenReturn(
+            Result.success(ArtistProfile(id = artist.id, name = artist.name, coverUrl = "hero")),
+        )
+        `when`(repository.getArtistTopSongs(artist.id))
+            .thenReturn(Result.success(listOf(song(1, "热门歌曲"))))
+        val viewModel = viewModel(repository)
+        advanceUntilIdle()
+
+        viewModel.setSourceMode(SourceMode.ARTISTS)
+        advanceUntilIdle()
+        viewModel.loadArtistDetail(artist)
+        advanceUntilIdle()
+
+        viewModel.goBack()
+
+        // 上一级必须是「歌手」分类页，而不是退回发现首页
+        assertEquals("sourceMode", SourceMode.ARTISTS, viewModel.uiState.value.sourceMode)
+        // 「歌手」分类页本身在栈里占两层（首页 + 分类），详情退掉后正好回到它
+        assertEquals("levelStack=${viewModel.uiState.value.levelStack}", 2, viewModel.uiState.value.levelStack.size)
+        assertEquals(listOf(artist), viewModel.uiState.value.artists)
+    }
+
+    @Test
+    fun `reloading the same detail does not grow the back stack`() = runTest(dispatcher) {
+        val repository = repositoryWithHomeContent()
+        val artist = ArtistResult(id = 48161, name = "Ariana Grande", avatarUrl = "avatar")
+        `when`(repository.getArtistProfile(artist.id)).thenReturn(
+            Result.success(ArtistProfile(id = artist.id, name = artist.name, coverUrl = "hero")),
+        )
+        `when`(repository.getArtistTopSongs(artist.id))
+            .thenReturn(Result.success(listOf(song(1, "热门歌曲"))))
+        val viewModel = viewModel(repository)
+        advanceUntilIdle()
+
+        viewModel.loadArtistDetail(artist, SourceMode.SEARCH)
+        advanceUntilIdle()
+        assertEquals(2, viewModel.uiState.value.levelStack.size)
+
+        // 重试/重新加载同一页时不能再压一层
+        viewModel.loadArtistDetail(artist, SourceMode.SEARCH)
+        advanceUntilIdle()
+        assertEquals(2, viewModel.uiState.value.levelStack.size)
     }
 
     private suspend fun repositoryWithHomeContent(): NeteaseRepository {
@@ -240,7 +293,6 @@ class DiscoverViewModelTest {
             cookieManager = cookies,
             settingsManager = settings,
             discoveryCache = mock(DiscoveryCacheManager::class.java),
-            seenManager = mock(SeenManager::class.java),
             downloadEngine = mock(DownloadEngine::class.java),
         )
     }

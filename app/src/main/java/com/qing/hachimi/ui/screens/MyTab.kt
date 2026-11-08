@@ -1,12 +1,27 @@
 package com.qing.hachimi.ui.screens
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateListOf
+import com.qing.hachimi.ui.navigation.NavKey2
+import top.yukonga.miuix.kmp.nav.core.NavDisplay
+import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
+import top.yukonga.miuix.kmp.nav.core.NavKey
+import top.yukonga.miuix.kmp.nav.core.rememberNavSystemCornerRadius
+import top.yukonga.miuix.kmp.nav.transition.NavTransitions
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridScope
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,7 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,8 +72,6 @@ import com.qing.hachimi.data.api.ListenDataApi
 import com.qing.hachimi.data.model.AlbumResult
 import com.qing.hachimi.data.model.ArtistResult
 
-private enum class MyLevel { HOME, LIST, SONGS }
-
 private data class MyEntry(
     val label: String,
     val icon: ImageVector,
@@ -80,7 +95,6 @@ fun MyTab(
     state: MyUiState,
     onOpenSection: (MySection) -> Unit,
     onBack: () -> Unit,
-    onClearDetail: () -> Unit,
     onComingSoon: () -> Unit,
     onPlaylistClick: (PlaylistApi.UserPlaylist) -> Unit,
     onToggleSong: (Long) -> Unit,
@@ -99,16 +113,16 @@ fun MyTab(
     isLoggedIn: Boolean = false,
     scrollToTopTrigger: Int = 0,
 ) {
-    val horizontalDirection = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1 else -1
-    val level = when {
-        state.isPlaylistDetail -> MyLevel.SONGS
-        state.section == MySection.HOME -> MyLevel.HOME
-        else -> MyLevel.LIST
+    // 平板横屏下，下方各类列表分两列
+    val twoColumnList = with(LocalDensity.current) {
+        useTwoColumnListLayout(LocalWindowInfo.current.containerSize.width.toDp())
     }
-
+    // 一级页和二级页各用固定的顶部内边距，切页时内容不会跟着顶栏一起重排
+    val primaryPadding = stablePagePadding(innerPadding, contextPage = false)
+    val contextPadding = stablePagePadding(innerPadding, contextPage = true)
     if (!isLoggedIn) {
         Box(
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            modifier = Modifier.fillMaxSize().padding(primaryPadding),
             contentAlignment = Alignment.Center
         ) {
             Text("请先登录后使用", color = colorScheme.onSurfaceVariantActions)
@@ -116,55 +130,92 @@ fun MyTab(
         return
     }
 
-    val suppressNav = LocalSuppressNavTransition.current
-    AnimatedContent(
-        targetState = level,
+    // 返回栈是导航的唯一事实来源：入栈/出栈直接改 navStack。
+    // 首帧按 ViewModel 的 section / isPlaylistDetail 还原栈深，Tab 销毁重建后也能回到原页。
+    val navStack = remember {
+        mutableStateListOf<NavKey>().apply {
+            add(NavKey2.MyHome)
+            if (state.section != MySection.HOME) {
+                add(NavKey2.MySectionPage(state.section))
+                if (state.isPlaylistDetail) {
+                    add(NavKey2.MyPlaylistDetail(0L, state.playlistName))
+                }
+            }
+        }
+    }
+    val openSectionNav: (MySection) -> Unit = { section ->
+        if (navStack.size > 1) {
+            navStack[navStack.lastIndex] = NavKey2.MySectionPage(section)
+        } else {
+            navStack.add(NavKey2.MySectionPage(section))
+        }
+        onOpenSection(section)
+    }
+    val openPlaylistNav: (PlaylistApi.UserPlaylist) -> Unit = { playlist ->
+        navStack.add(NavKey2.MyPlaylistDetail(playlist.id, playlist.name))
+        onPlaylistClick(playlist)
+    }
+    val backNav: () -> Unit = {
+        if (navStack.size > 1) navStack.removeAt(navStack.lastIndex)
+        onBack()
+    }
+    NavDisplay(
+        backStack = navStack,
         modifier = Modifier.fillMaxSize(),
-        transitionSpec = {
-            hierarchicalNavigationTransition(
-                isForward = targetState.ordinal > initialState.ordinal,
-                layoutDirection = horizontalDirection,
-                suppress = suppressNav,
-            )
-        },
-        label = "MyLevel"
-    ) { target ->
-        when (target) {
-            MyLevel.HOME -> MyHome(
+        onBack = backNav,
+        transition = NavTransitions.MiuixDefault,
+        effects = NavDisplayEffects(
+            cornerClipRadius = rememberNavSystemCornerRadius(),
+            dimAmount = 0.5f,
+        ),
+    ) {
+        entry<NavKey2.MyHome> {
+            MyHome(
                 state = state,
-                onOpenSection = onOpenSection,
-                onPlaylistClick = onPlaylistClick,
+                onOpenSection = openSectionNav,
+                onPlaylistClick = openPlaylistNav,
                 onRefresh = onRefresh,
-                innerPadding = innerPadding,
+                innerPadding = primaryPadding,
                 scrollToTopTrigger = scrollToTopTrigger,
+                twoColumn = twoColumnList,
             )
-            MyLevel.LIST -> MyList(
-                state = state,
-                onOpenSection = onOpenSection,
-                onBack = onBack,
-                onPlaylistClick = onPlaylistClick,
-                onToggleSong = onToggleSong,
-                onSelectAll = onSelectAll,
-                onDownload = onDownload,
-                onLoadMoreCloud = onLoadMoreCloud,
-                onCloudSearchQueryChange = onCloudSearchQueryChange,
-                onRefresh = onRefresh,
-                onSetRankType = onSetRankType,
-                onSetFootprintTab = onSetFootprintTab,
-                onLoadMoreAlbums = onLoadMoreAlbums,
-                onLoadMoreArtists = onLoadMoreArtists,
-                onAlbumClick = onAlbumClick,
-                onArtistClick = onArtistClick,
-                innerPadding = innerPadding,
-            )
-            MyLevel.SONGS -> PlaylistDetailPage(
-                state = state,
-                onBack = onClearDetail,
-                onToggleSong = onToggleSong,
-                onSelectAll = onSelectAll,
-                onDownload = onDownload,
-                innerPadding = innerPadding,
-            )
+        }
+        entry<NavKey2.MySectionPage> {
+            PageSurface {
+                MyList(
+                    state = state,
+                    onOpenSection = openSectionNav,
+                    onBack = backNav,
+                    onPlaylistClick = openPlaylistNav,
+                    onToggleSong = onToggleSong,
+                    onSelectAll = onSelectAll,
+                    onDownload = onDownload,
+                    onLoadMoreCloud = onLoadMoreCloud,
+                    onCloudSearchQueryChange = onCloudSearchQueryChange,
+                    onRefresh = onRefresh,
+                    onSetRankType = onSetRankType,
+                    onSetFootprintTab = onSetFootprintTab,
+                    onLoadMoreAlbums = onLoadMoreAlbums,
+                    onLoadMoreArtists = onLoadMoreArtists,
+                    onAlbumClick = onAlbumClick,
+                    onArtistClick = onArtistClick,
+                    innerPadding = contextPadding,
+                    twoColumn = twoColumnList,
+                )
+            }
+        }
+        entry<NavKey2.MyPlaylistDetail> {
+            PageSurface {
+                PlaylistDetailPage(
+                    state = state,
+                    onBack = backNav,
+                    onToggleSong = onToggleSong,
+                    onSelectAll = onSelectAll,
+                    onDownload = onDownload,
+                    innerPadding = contextPadding,
+                    twoColumn = twoColumnList,
+                )
+            }
         }
     }
 }
@@ -182,10 +233,22 @@ private fun MyHome(
     onRefresh: () -> Unit,
     innerPadding: PaddingValues,
     scrollToTopTrigger: Int,
+    twoColumn: Boolean = false,
 ) {
     val listState = rememberLazyListState()
     LaunchedEffect(scrollToTopTrigger) {
         if (scrollToTopTrigger > 0) listState.animateScrollToItem(0)
+    }
+    if (twoColumn) {
+        HomeGrid(
+            state = state,
+            listState = listState,
+            innerPadding = innerPadding,
+            onOpenSection = onOpenSection,
+            onPlaylistClick = onPlaylistClick,
+            onRefresh = onRefresh,
+        )
+        return
     }
     CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -203,7 +266,7 @@ private fun MyHome(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)) {
                 ScreenHeading("我的", onRefresh)
-                StatusMessage(state.statusMessage)
+                StatusMessage(state.statusMessage, modifier = Modifier.padding(horizontal = AppSpacing.md))
             }
         }
         item {
@@ -253,6 +316,87 @@ private fun MyHome(
             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
         )
     }
+    }
+}
+
+/** 「我的」首页宽屏两列：标题/概览/快捷入口横跨整行，歌单卡片两列并排 */
+@OptIn(ExperimentalScrollBarApi::class)
+@Composable
+private fun HomeGrid(
+    state: MyUiState,
+    listState: LazyListState,
+    innerPadding: PaddingValues,
+    onOpenSection: (MySection) -> Unit,
+    onPlaylistClick: (PlaylistApi.UserPlaylist) -> Unit,
+    onRefresh: () -> Unit,
+) {
+    val gridState = rememberLazyGridState()
+    CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(gridState).value) {
+    Box(modifier = Modifier.fillMaxSize()) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        state = gridState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = AppSpacing.md,
+            end = AppSpacing.md,
+            top = innerPadding.calculateTopPadding(),
+            bottom = LocalMainBottomContentPadding.current,
+        ),
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.lg),
+        horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+    ) {
+        fullLine {
+            Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)) {
+                ScreenHeading("我的", onRefresh)
+                StatusMessage(state.statusMessage, modifier = Modifier.padding(horizontal = AppSpacing.md))
+            }
+        }
+        fullLine {
+            UserProfileCard(
+                profile = state.profile,
+                playlistCount = state.myPlaylists.size,
+                collectedCount = state.collectedPlaylists.size,
+                cloudCount = state.cloudSongs.size,
+                cloudHasMore = state.cloudHasMore,
+            )
+        }
+        fullLine {
+            Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+                SectionHeading("快捷入口")
+                EntryGrid(
+                    onEntryClick = { entry -> onOpenSection(entry.section) },
+                )
+            }
+        }
+        playlistCards("我的歌单", state.myPlaylists, MySection.PLAYLISTS, onOpenSection, onPlaylistClick)
+        playlistCards("收藏歌单", state.collectedPlaylists, MySection.COLLECTED, onOpenSection, onPlaylistClick)
+    }
+    VerticalScrollBar(
+        adapter = rememberScrollBarAdapter(gridState),
+        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+    )
+    }
+    }
+}
+
+/** 横跨整行的一格 */
+private fun LazyGridScope.fullLine(content: @Composable () -> Unit) {
+    item(span = { GridItemSpan(maxLineSpan) }) { content() }
+}
+
+/** 歌单横向专区在宽屏下改成两列卡片 */
+private fun LazyGridScope.playlistCards(
+    title: String,
+    playlists: List<PlaylistApi.UserPlaylist>,
+    section: MySection,
+    onOpenSection: (MySection) -> Unit,
+    onPlaylistClick: (PlaylistApi.UserPlaylist) -> Unit,
+) {
+    if (playlists.isEmpty()) return
+    fullLine { SectionHeading(title, onMore = { onOpenSection(section) }) }
+    items(playlists.take(8), key = { it.id }) { playlist ->
+        PlaylistCoverCard(playlist) { onPlaylistClick(playlist) }
     }
 }
 
@@ -444,6 +588,7 @@ private fun MyList(
     onAlbumClick: (AlbumResult) -> Unit,
     onArtistClick: (ArtistResult) -> Unit,
     innerPadding: PaddingValues,
+    twoColumn: Boolean = false,
 ) {
     val sectionListStates = remember { mutableMapOf<MySection, LazyListState>() }
     Column(Modifier.fillMaxSize()) {
@@ -453,7 +598,7 @@ private fun MyList(
             onRefresh = onRefresh,
             paddingTop = innerPadding.calculateTopPadding(),
         )
-        StatusMessage(state.statusMessage)
+        StatusMessage(state.statusMessage, modifier = Modifier.padding(horizontal = AppSpacing.md))
         AnimatedContent(
             targetState = state.section,
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -476,8 +621,9 @@ private fun MyList(
                     }
                 } else {
                     CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
-                    LazyColumn(
+                    TwoColumnLazyList(
                         state = listState,
+                        twoColumn = twoColumn,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
                             start = AppSpacing.md,
@@ -505,8 +651,9 @@ private fun MyList(
                     }
                 } else {
                     CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
-                    LazyColumn(
+                    TwoColumnLazyList(
                         state = listState,
+                        twoColumn = twoColumn,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
                             start = AppSpacing.md,
@@ -525,6 +672,7 @@ private fun MyList(
             MySection.LIKED -> LikedSongsList(
                 state = state,
                 listState = listState,
+                twoColumn = twoColumn,
                 onToggleSong = onToggleSong,
                 onSelectAll = onSelectAll,
                 onDownload = onDownload,
@@ -532,6 +680,7 @@ private fun MyList(
             MySection.CLOUD -> CloudSongsList(
                 state = state,
                 listState = listState,
+                twoColumn = twoColumn,
                 onToggleSong = onToggleSong,
                 onSelectAll = onSelectAll,
                 onDownload = onDownload,
@@ -541,6 +690,7 @@ private fun MyList(
             MySection.RANK -> RankList(
                 state = state,
                 listState = listState,
+                twoColumn = twoColumn,
                 onSetRankType = onSetRankType,
                 onToggleSong = onToggleSong,
                 onSelectAll = onSelectAll,
@@ -549,6 +699,7 @@ private fun MyList(
             MySection.RECENT -> RecentList(
                 state = state,
                 listState = listState,
+                twoColumn = twoColumn,
                 onToggleSong = onToggleSong,
                 onSelectAll = onSelectAll,
                 onDownload = onDownload,
@@ -556,6 +707,7 @@ private fun MyList(
             MySection.FOOTPRINT -> FootprintList(
                 state = state,
                 listState = listState,
+                twoColumn = twoColumn,
                 onSetFootprintTab = onSetFootprintTab,
                 onToggleSong = onToggleSong,
                 onSelectAll = onSelectAll,
@@ -564,12 +716,14 @@ private fun MyList(
             MySection.COLLECTED_ALBUMS -> CollectedAlbumsList(
                 state = state,
                 listState = listState,
+                twoColumn = twoColumn,
                 onAlbumClick = onAlbumClick,
                 onLoadMore = onLoadMoreAlbums,
             )
             MySection.COLLECTED_ARTISTS -> CollectedArtistsList(
                 state = state,
                 listState = listState,
+                twoColumn = twoColumn,
                 onArtistClick = onArtistClick,
                 onLoadMore = onLoadMoreArtists,
             )
@@ -583,6 +737,7 @@ private fun MyList(
 private fun LikedSongsList(
     state: MyUiState,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    twoColumn: Boolean,
     onToggleSong: (Long) -> Unit,
     onSelectAll: () -> Unit,
     onDownload: () -> Unit,
@@ -614,15 +769,16 @@ private fun LikedSongsList(
                     pagination = {
                         ListPageNavigator(
                             currentPage = currentPage,
-                            itemCount = state.likedSongs.size,
+                            itemCount = pagedSongs.size,
                             onPageChange = { currentPage = it },
                             stateKey = "liked",
                         )
                     },
                 )
                 CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
-                LazyColumn(
+                TwoColumnLazyList(
                     state = listState,
+                    twoColumn = twoColumn,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     contentPadding = PaddingValues(
                         start = AppSpacing.md,
@@ -650,6 +806,7 @@ private fun LikedSongsList(
 private fun CloudSongsList(
     state: MyUiState,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    twoColumn: Boolean,
     onToggleSong: (Long) -> Unit,
     onSelectAll: () -> Unit,
     onDownload: () -> Unit,
@@ -719,7 +876,7 @@ private fun CloudSongsList(
             pagination = {
                 ListPageNavigator(
                     currentPage = cloudPage,
-                    itemCount = filteredCloudSongs.size,
+                    itemCount = pagedCloudSongs.size,
                     onPageChange = { cloudPage = it },
                     stateKey = state.cloudSearchQuery,
                     hasMore = state.cloudHasMore,
@@ -729,8 +886,9 @@ private fun CloudSongsList(
             },
         )
         CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
-        LazyColumn(
+        TwoColumnLazyList(
             state = listState,
+            twoColumn = twoColumn,
             modifier = Modifier.weight(1f).fillMaxWidth(),
             contentPadding = PaddingValues(
                 start = AppSpacing.md,
@@ -806,6 +964,7 @@ private fun RecordSongsList(
     entries: List<ListenDataApi.RecordEntry>,
     isLoading: Boolean,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    twoColumn: Boolean,
     selectedIds: Set<Long>,
     isPreparingDownloads: Boolean,
     emptyText: String,
@@ -845,15 +1004,16 @@ private fun RecordSongsList(
                     pagination = {
                         ListPageNavigator(
                             currentPage = page,
-                            itemCount = entries.size,
+                            itemCount = pagedEntries.size,
                             onPageChange = { page = it },
                             stateKey = stateKey,
                         )
                     },
                 )
                 CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
-                LazyColumn(
+                TwoColumnLazyList(
                     state = listState,
+                    twoColumn = twoColumn,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     contentPadding = PaddingValues(
                         start = AppSpacing.md,
@@ -944,6 +1104,7 @@ private fun formatPlayCount(count: Long): String = when {
 private fun RankList(
     state: MyUiState,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    twoColumn: Boolean,
     onSetRankType: (Int) -> Unit,
     onToggleSong: (Long) -> Unit,
     onSelectAll: () -> Unit,
@@ -953,6 +1114,7 @@ private fun RankList(
         entries = state.rankEntries,
         isLoading = state.isLoading,
         listState = listState,
+        twoColumn = twoColumn,
         selectedIds = state.selectedIds,
         isPreparingDownloads = state.isPreparingDownloads,
         emptyText = "暂无听歌排行数据",
@@ -975,6 +1137,7 @@ private fun RankList(
 private fun RecentList(
     state: MyUiState,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    twoColumn: Boolean,
     onToggleSong: (Long) -> Unit,
     onSelectAll: () -> Unit,
     onDownload: () -> Unit,
@@ -983,6 +1146,7 @@ private fun RecentList(
         entries = state.recentListens,
         isLoading = state.isLoading,
         listState = listState,
+        twoColumn = twoColumn,
         selectedIds = state.selectedIds,
         isPreparingDownloads = state.isPreparingDownloads,
         emptyText = "暂无最近播放记录",
@@ -997,6 +1161,7 @@ private fun RecentList(
 private fun FootprintList(
     state: MyUiState,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    twoColumn: Boolean,
     onSetFootprintTab: (FootprintTab) -> Unit,
     onToggleSong: (Long) -> Unit,
     onSelectAll: () -> Unit,
@@ -1012,6 +1177,7 @@ private fun FootprintList(
         entries = entries,
         isLoading = state.isLoading,
         listState = listState,
+        twoColumn = twoColumn,
         selectedIds = state.selectedIds,
         isPreparingDownloads = state.isPreparingDownloads,
         emptyText = "暂无听歌足迹数据",
@@ -1079,6 +1245,7 @@ private fun formatDuration(minutes: Long): String = when {
 private fun CollectedAlbumsList(
     state: MyUiState,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    twoColumn: Boolean,
     onAlbumClick: (AlbumResult) -> Unit,
     onLoadMore: () -> Unit,
 ) {
@@ -1095,8 +1262,9 @@ private fun CollectedAlbumsList(
         return
     }
     CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
-    LazyColumn(
+    TwoColumnLazyList(
         state = listState,
+        twoColumn = twoColumn,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             start = AppSpacing.md,
@@ -1109,19 +1277,7 @@ private fun CollectedAlbumsList(
             CollectionAlbumItem(album = album, onClick = { onAlbumClick(album) })
         }
         if (state.collectedAlbumsHasMore) {
-            item {
-                Box(Modifier.fillMaxWidth().padding(vertical = AppSpacing.sm), contentAlignment = Alignment.Center) {
-                    Text(
-                        if (state.isLoadingMore) "加载中..." else "加载更多",
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable(enabled = !state.isLoadingMore, onClick = onLoadMore)
-                            .padding(horizontal = AppSpacing.lg, vertical = AppSpacing.sm),
-                        color = colorScheme.primary,
-                        style = MiuixTheme.textStyles.body2,
-                    )
-                }
-            }
+            loadMoreButton(state.isLoadingMore, onLoadMore)
         }
     }
     }
@@ -1164,6 +1320,7 @@ private fun CollectionAlbumItem(album: AlbumResult, onClick: () -> Unit) {
 private fun CollectedArtistsList(
     state: MyUiState,
     listState: androidx.compose.foundation.lazy.LazyListState,
+    twoColumn: Boolean,
     onArtistClick: (ArtistResult) -> Unit,
     onLoadMore: () -> Unit,
 ) {
@@ -1180,8 +1337,9 @@ private fun CollectedArtistsList(
         return
     }
     CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
-    LazyColumn(
+    TwoColumnLazyList(
         state = listState,
+        twoColumn = twoColumn,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             start = AppSpacing.md,
@@ -1194,19 +1352,7 @@ private fun CollectedArtistsList(
             CollectionArtistItem(artist = artist, onClick = { onArtistClick(artist) })
         }
         if (state.collectedArtistsHasMore) {
-            item {
-                Box(Modifier.fillMaxWidth().padding(vertical = AppSpacing.sm), contentAlignment = Alignment.Center) {
-                    Text(
-                        if (state.isLoadingMore) "加载中..." else "加载更多",
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable(enabled = !state.isLoadingMore, onClick = onLoadMore)
-                            .padding(horizontal = AppSpacing.lg, vertical = AppSpacing.sm),
-                        color = colorScheme.primary,
-                        style = MiuixTheme.textStyles.body2,
-                    )
-                }
-            }
+            loadMoreButton(state.isLoadingMore, onLoadMore)
         }
     }
     }
@@ -1256,6 +1402,74 @@ private fun CollectionArtistItem(artist: ArtistResult, onClick: () -> Unit) {
 // Playlist Detail (三级页: 歌单内歌曲)
 // ═════════════════════════════════════════════════════════════════════════════
 
+/**
+ * 列表型内容分两列时用的容器：宽屏横屏走 [LazyVerticalGrid]，其余情况仍是 [LazyColumn]。
+ * 内容按条目声明，两种容器共用一份定义：单列每行一条，双列每行两条。
+ */
+@Composable
+private fun TwoColumnLazyList(
+    state: androidx.compose.foundation.lazy.LazyListState,
+    twoColumn: Boolean,
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
+    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+    content: TwoColumnListScope.() -> Unit,
+) {
+    val entries = TwoColumnListScope().apply(content).entries
+    if (!twoColumn) {
+        LazyColumn(
+            state = state,
+            modifier = modifier,
+            contentPadding = contentPadding,
+            verticalArrangement = verticalArrangement,
+        ) {
+            entries.forEach { entry -> item(key = entry.key) { entry.content() } }
+        }
+        return
+    }
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        state = rememberLazyGridState(),
+        modifier = modifier,
+        contentPadding = contentPadding,
+        verticalArrangement = verticalArrangement,
+        horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+    ) {
+        entries.forEach { entry -> item(key = entry.key) { entry.content() } }
+    }
+}
+
+/** 双列列表的条目登记入口 */
+private class TwoColumnListScope {
+    val entries = mutableListOf<TwoColumnEntry>()
+
+    fun <T> items(list: List<T>, key: ((T) -> Any)? = null, itemContent: @Composable (T) -> Unit) {
+        list.forEachIndexed { index, value ->
+            entries += TwoColumnEntry(key?.invoke(value) ?: index) { itemContent(value) }
+        }
+    }
+
+    /** 分页列表底部的“加载更多”按钮 */
+    fun loadMoreButton(isLoadingMore: Boolean, onLoadMore: () -> Unit) {
+        entries += TwoColumnEntry("loadMore") {
+            val colorScheme = MiuixTheme.colorScheme
+            Box(Modifier.fillMaxWidth().padding(vertical = AppSpacing.sm), contentAlignment = Alignment.Center) {
+                Text(
+                    if (isLoadingMore) "加载中..." else "加载更多",
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(enabled = !isLoadingMore, onClick = onLoadMore)
+                        .padding(horizontal = AppSpacing.lg, vertical = AppSpacing.sm),
+                    color = colorScheme.primary,
+                    style = MiuixTheme.textStyles.body2,
+                )
+            }
+        }
+    }
+}
+
+private class TwoColumnEntry(val key: Any, val content: @Composable () -> Unit)
+
 @OptIn(ExperimentalScrollBarApi::class)
 @Composable
 private fun PlaylistDetailPage(
@@ -1265,6 +1479,7 @@ private fun PlaylistDetailPage(
     onSelectAll: () -> Unit,
     onDownload: () -> Unit,
     innerPadding: PaddingValues,
+    twoColumn: Boolean = false,
 ) {
     val listState = rememberLazyListState()
     var playlistPage by remember(state.playlistName) { mutableIntStateOf(0) }
@@ -1284,7 +1499,7 @@ private fun PlaylistDetailPage(
             paddingTop = innerPadding.calculateTopPadding(),
             showRefresh = false,
         )
-        StatusMessage(state.statusMessage)
+        StatusMessage(state.statusMessage, modifier = Modifier.padding(horizontal = AppSpacing.md))
         if (state.isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 LoadingIndicator("加载中...")
@@ -1304,7 +1519,7 @@ private fun PlaylistDetailPage(
                     pagination = {
                         ListPageNavigator(
                             currentPage = playlistPage,
-                            itemCount = state.songs.size,
+                            itemCount = pagedPlaylistSongs.size,
                             onPageChange = { playlistPage = it },
                             stateKey = state.playlistName,
                         )
@@ -1312,8 +1527,9 @@ private fun PlaylistDetailPage(
                 )
                 CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
                 Box(Modifier.weight(1f).fillMaxWidth()) {
-                LazyColumn(
+                TwoColumnLazyList(
                     state = listState,
+                    twoColumn = twoColumn,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
                         start = AppSpacing.md,
@@ -1347,21 +1563,6 @@ private fun PlaylistDetailPage(
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun SectionHeading(title: String, onMore: (() -> Unit)? = null) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(title, modifier = Modifier.weight(1f), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.SemiBold)
-        if (onMore != null) {
-            Text(
-                "查看全部",
-                modifier = Modifier.clickable(onClick = onMore).padding(horizontal = AppSpacing.sm, vertical = AppSpacing.xs),
-                color = colorScheme.primary,
-                style = MiuixTheme.textStyles.body2,
-            )
-        }
-    }
-}
-
-@Composable
 private fun ListTopBar(
     title: String,
     onBack: () -> Unit,
@@ -1392,22 +1593,5 @@ private fun ListTopBar(
                 Icon(MiuixIcons.Refresh, "刷新", tint = colorScheme.onSurfaceVariantActions)
             }
         }
-    }
-}
-
-@Composable
-private fun StatusMessage(message: String?) {
-    if (message.isNullOrBlank()) return
-    val isError = message.contains("失败") || message.contains("超时") || message.contains("异常")
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = AppSpacing.md, vertical = AppSpacing.xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            message,
-            modifier = Modifier.weight(1f),
-            color = if (isError) colorScheme.error else colorScheme.onSurfaceVariantActions,
-            style = MiuixTheme.textStyles.body2,
-        )
     }
 }

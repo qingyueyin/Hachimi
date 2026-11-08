@@ -1,12 +1,12 @@
 package com.qing.hachimi.ui.screens
 
 import androidx.lifecycle.ViewModel
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.viewModelScope
 import com.qing.hachimi.data.api.ChartInfo
 import com.qing.hachimi.data.api.ArtistAuthenticationRequiredException
 import com.qing.hachimi.data.local.CookieManager
 import com.qing.hachimi.data.local.DiscoveryCacheManager
-import com.qing.hachimi.data.local.SeenManager
 import com.qing.hachimi.data.local.SettingsManager
 import com.qing.hachimi.data.model.AlbumResult
 import com.qing.hachimi.data.model.AlbumResultDeduplicator
@@ -37,6 +37,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
+/** 发现 Tab 的三个层级，作为显式导航栈的元素 */
+enum class DiscoverLevel { HOME, CATEGORY, DETAIL }
+
+@Immutable
 data class DiscoverUiState(
     val sourceMode: SourceMode = SourceMode.RECOMMEND,
     val previousSourceMode: SourceMode = SourceMode.RECOMMEND,
@@ -104,9 +108,28 @@ data class DiscoverUiState(
     val isLoadingFm: Boolean = false,
     val fmThreshold: Int = 3,
     val isPreparingDownloads: Boolean = false,
+    /**
+     * 发现页的导航层级栈。[levelStack] 只记录层级标识，不承载数据；
+     * 数据仍然放在 songs / collectionDetail / activeArtist 等字段里。
+     *
+     * 迁移说明：以前层级由 isDetailView 从数据反推（songs 非空就当作详情页），
+     * 导致请求失败时页面不跳转、刷新清空数据时页面被弹回。改成显式栈后，
+     * 层级只由“用户点了什么”决定，异步数据回来不会改变当前所在页。
+     */
+    val levelStack: List<DiscoverLevel> = listOf(DiscoverLevel.HOME),
 ) {
-    val isDetailView: Boolean get() = songs.isNotEmpty() || sourceLabel.isNotBlank() || collectionDetail != null
-    val canNavigateBack: Boolean get() = isDetailView || sourceMode != SourceMode.RECOMMEND
+    /** 当前层级（栈顶） */
+    val currentLevel: DiscoverLevel get() = levelStack.lastOrNull() ?: DiscoverLevel.HOME
+
+    /** 详情页的数据键，用于在栈内切换不同详情内容 */
+    val detailKey: String get() = when {
+        isArtistPage -> "artist:${activeArtist?.id}"
+        collectionDetail != null -> "songs:${collectionDetail.kind.name}:${collectionDetail.id}"
+        else -> "songs:$playlistName"
+    }
+
+    val isDetailView: Boolean get() = currentLevel == DiscoverLevel.DETAIL
+    val canNavigateBack: Boolean get() = levelStack.size > 1
     val isArtistPage: Boolean
         get() = sourceMode == SourceMode.ARTIST_DETAIL && sourceLabel == "歌手" && activeArtist != null
     val shouldReturnToSearch: Boolean
@@ -130,7 +153,6 @@ class DiscoverViewModel(
     private val cookieManager: CookieManager,
     private val settingsManager: SettingsManager,
     private val discoveryCache: DiscoveryCacheManager,
-    private val seenManager: SeenManager,
     private val downloadEngine: DownloadEngine,
 ) : ViewModel() {
 
@@ -190,12 +212,17 @@ class DiscoverViewModel(
 
     fun setSourceMode(mode: SourceMode) {
         val current = _uiState.value.sourceMode
-        markCurrentSeen(current)
         if (mode == current) return
         detailRequestId++
+        val targetStack = if (mode == SourceMode.RECOMMEND) {
+            listOf(DiscoverLevel.HOME)
+        } else {
+            listOf(DiscoverLevel.HOME, DiscoverLevel.CATEGORY)
+        }
         _uiState.value = _uiState.value.copy(
             previousSourceMode = current,
             sourceMode = mode,
+            levelStack = targetStack,
             gridColumns = settingsManager.getGridColumns(gridPageKey(mode)),
             songs = emptyList(),
             selectedIds = emptySet(),
@@ -381,7 +408,6 @@ class DiscoverViewModel(
     fun selectStyleTag(tag: StyleTag) {
         val current = _uiState.value
         if (current.playlistTag == tag.name) return
-        markCurrentSeen(current.sourceMode)
         detailRequestId++
         _uiState.value = _uiState.value.copy(
             previousSourceMode = current.sourceMode,
@@ -1013,6 +1039,7 @@ class DiscoverViewModel(
     fun resetToHome() {
         detailRequestId++
         _uiState.value = _uiState.value.copy(
+            levelStack = listOf(DiscoverLevel.HOME),
             sourceMode = SourceMode.RECOMMEND,
             previousSourceMode = SourceMode.RECOMMEND,
             preSongSourceMode = SourceMode.RECOMMEND,
@@ -1088,12 +1115,16 @@ class DiscoverViewModel(
     fun goBack() {
         detailRequestId++
         val state = _uiState.value
+        // 先弹出导航栈；栈只剩根层时不做处理（交给系统决定是否退出）
+        if (state.levelStack.size <= 1) return
+        val poppedStack = state.levelStack.dropLast(1)
         if (
             state.sourceMode == SourceMode.ARTIST_DETAIL &&
             state.sourceLabel == "专辑" &&
             state.activeArtist != null
         ) {
             _uiState.value = state.copy(
+                levelStack = poppedStack,
                 songs = state.artistDetailSongs,
                 selectedIds = emptySet(),
                 playlistName = state.activeArtist.name,
@@ -1106,10 +1137,11 @@ class DiscoverViewModel(
             )
             retryDetail = { loadArtistDetail(state.activeArtist, state.artistParentSourceMode) }
         } else if (state.isArtistPage || (state.sourceMode == SourceMode.ARTIST_DETAIL && state.isLoading)) {
-            val destination = state.artistParentSourceMode.takeUnless { it == SourceMode.SEARCH }
-                ?: SourceMode.RECOMMEND
+            // 「歌手」分类页进来时上一级就是该分类页，只弹掉详情那层；首页/搜索进来的一律退回首页
+            val fromCategory = state.artistParentSourceMode != SourceMode.SEARCH
             _uiState.value = state.copy(
-                sourceMode = destination,
+                levelStack = if (fromCategory) poppedStack else listOf(DiscoverLevel.HOME),
+                sourceMode = if (fromCategory) state.artistParentSourceMode else SourceMode.RECOMMEND,
                 previousSourceMode = SourceMode.ARTIST_DETAIL,
                 songs = emptyList(),
                 selectedIds = emptySet(),
@@ -1137,6 +1169,7 @@ class DiscoverViewModel(
             retryDetail = null
         } else if (state.isDetailView || state.isLoading) {
             _uiState.value = state.copy(
+                levelStack = poppedStack,
                 songs = emptyList(),
                 selectedIds = emptySet(),
                 playlistName = "",
@@ -1153,6 +1186,7 @@ class DiscoverViewModel(
             retryDetail = null
         } else if (state.sourceMode != SourceMode.RECOMMEND) {
             _uiState.value = state.copy(
+                levelStack = poppedStack,
                 previousSourceMode = state.sourceMode,
                 sourceMode = SourceMode.RECOMMEND,
                 statusMessage = null,
@@ -1221,7 +1255,15 @@ class DiscoverViewModel(
         detail: CollectionDetail? = null,
     ): Long {
         val requestId = ++detailRequestId
-        _uiState.value = _uiState.value.copy(
+        val state = _uiState.value
+        // 详情页之间一律压栈：歌手页里点专辑要能退回歌手页。
+        // 之前“替换栈顶”会把歌手页从栈里抹掉，返回后落到一个空白页。
+        // 同一页重试时保持栈不变，否则每点一次重试就多一层。
+        val isSameDetail = state.currentLevel == DiscoverLevel.DETAIL &&
+            state.sourceLabel == label && state.playlistName == name
+        val newStack = if (isSameDetail) state.levelStack else state.levelStack + DiscoverLevel.DETAIL
+        _uiState.value = state.copy(
+            levelStack = newStack,
             preSongSourceMode = source,
             isLoading = true,
             songs = emptyList(),
@@ -1277,14 +1319,6 @@ class DiscoverViewModel(
         SourceMode.PERSONAL_FM -> state.fmSongs
         SourceMode.NEW_SONGS -> state.newSongs
         else -> state.songs
-    }
-
-    private fun markCurrentSeen(mode: SourceMode) {
-        when (mode) {
-            SourceMode.CHARTS -> seenManager.markAllSeenCharts(_uiState.value.chartList.map { it.id })
-            SourceMode.NEW_ALBUMS -> seenManager.markAllSeenAlbums(_uiState.value.newAlbumsList.map { it.id })
-            else -> Unit
-        }
     }
 
     private fun <T> mergeById(existing: List<T>, incoming: List<T>, id: (T) -> Long): List<T> =

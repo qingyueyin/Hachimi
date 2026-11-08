@@ -1,5 +1,14 @@
 package com.qing.hachimi.ui.screens
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateListOf
+import com.qing.hachimi.ui.navigation.NavKey2
+import top.yukonga.miuix.kmp.nav.core.NavDisplay
+import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import top.yukonga.miuix.kmp.nav.core.NavKey
+import top.yukonga.miuix.kmp.nav.core.rememberNavSystemCornerRadius
+import top.yukonga.miuix.kmp.nav.transition.NavTransitions
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -64,6 +73,8 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 fun SearchTab(
     state: SearchUiState,
     downloadProgress: Map<Long, DownloadProgress>,
+    onBack: () -> Unit = {},
+    artistDetailContent: @Composable () -> Unit = {},
     onSearchQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
     onParseUrl: (String) -> Unit = {},
@@ -81,6 +92,7 @@ fun SearchTab(
     onRemoveHistory: (String) -> Unit = {},
     onClearHistory: () -> Unit = {},
     onSuggestionClick: (SearchSuggestion) -> Unit = {},
+    navStack: SnapshotStateList<NavKey>,
     innerPadding: PaddingValues = PaddingValues(0.dp),
     sortOption: SongSortOption = SongSortOption.DEFAULT,
     sortAscending: Boolean = true,
@@ -94,6 +106,9 @@ fun SearchTab(
     val sortedSongs = remember(state.songs, sortOption, sortAscending) {
         state.songs.sortedByOption(sortOption, sortAscending)
     }
+    // 一级页和二级页各用固定的顶部内边距，切页时内容不会跟着顶栏一起重排
+    val primaryPadding = stablePagePadding(innerPadding, contextPage = false)
+    val contextPadding = stablePagePadding(innerPadding, contextPage = true)
 
     val resultPageKey = "${state.searchQuery}:${state.searchCategory.name}"
     val resultListState = rememberLazyListState()
@@ -102,45 +117,65 @@ fun SearchTab(
 
     var inputBarBottomY by remember { mutableIntStateOf(0) }
     var boxTopY by remember { mutableIntStateOf(0) }
+    // 面板是否该显示：只看「聚焦 + 有联想词」。
+    // 不能把 suggestionsVisible 当条件——请求回来时它不会变，副作用不会重跑，面板永远出不来。
+    val shouldShowPanel = isInputFocused &&
+        inputMode == InputMode.SEARCH &&
+        !state.isSearching &&
+        state.suggestions.isNotEmpty()
     var panelVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(state.suggestionsVisible, isInputFocused, inputMode, state.isSearching) {
-        if (state.suggestionsVisible && isInputFocused && inputMode == InputMode.SEARCH && !state.isSearching && state.suggestions.isNotEmpty()) {
+    LaunchedEffect(shouldShowPanel) {
+        if (shouldShowPanel) {
             panelVisible = true
-        } else if (!isInputFocused) {
+        } else {
+            // 留 150ms，让点击联想先拿到焦点
             delay(150)
             panelVisible = false
         }
     }
 
     val horizontalDirection = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1 else -1
-    val suppressNav = LocalSuppressNavTransition.current
-    AnimatedContent(
-        targetState = state.isDetailView,
+    // 搜索页由导航栈驱动：首页在栈底，详情叠在上面。
+    // 返回手势（含预测性返回拖动预览）、位移缩放与圆角裁剪由 NavDisplay 提供。
+    // NavDisplay 不允许空栈，首帧先用当前层级预填，之后由 LaunchedEffect 同步
+    val openDetailNav: (String) -> Unit = { key -> navStack.add(NavKey2.SearchResult(key)) }
+    val backNav: () -> Unit = {
+        if (navStack.size > 1) navStack.removeAt(navStack.lastIndex)
+        onBack()
+    }
+    val onAlbumClickNav: (AlbumResult) -> Unit = { album ->
+        openDetailNav("album:${album.id}")
+        onAlbumClick(album)
+    }
+    val onPlaylistClickNav: (DiscoveryPlaylist) -> Unit = { playlist ->
+        openDetailNav("playlist:${playlist.id}")
+        onPlaylistClick(playlist)
+    }
+    val onPodcastClickNav: (PodcastChannel) -> Unit = { podcast ->
+        openDetailNav("podcast:${podcast.id}")
+        onPodcastClick(podcast)
+    }
+    val onArtistClickNav: (ArtistResult) -> Unit = { artist ->
+        navStack.add(NavKey2.ArtistDetail(artist.id, artist.name))
+        onArtistClick(artist)
+    }
+    // 兜底：ViewModel 回到首页时（例如清空搜索），栈也回到首页
+    LaunchedEffect(state.isDetailView, state.isArtistPage) {
+        if (!state.isDetailView && !state.isArtistPage) {
+            while (navStack.size > 1) navStack.removeAt(navStack.lastIndex)
+        }
+    }
+    NavDisplay(
+        backStack = navStack,
         modifier = Modifier.fillMaxSize(),
-        transitionSpec = {
-            hierarchicalNavigationTransition(
-                isForward = targetState,
-                layoutDirection = horizontalDirection,
-                suppress = suppressNav,
-            )
-        },
-        label = "SearchDetailTransition",
-    ) { isDetail ->
-        if (isDetail) {
-            SearchCollectionDetail(
-                state = state,
-                songs = sortedSongs,
-                downloadProgress = downloadProgress,
-                onToggleSelect = onToggleSelect,
-                onSelectAll = onSelectAll,
-                onDownload = onDownload,
-                onLoadMore = onLoadMore,
-                onRetry = onRetry,
-                innerPadding = innerPadding,
-                scrollToTopTrigger = scrollToTopTrigger,
-                sortKey = "$sortOption:$sortAscending",
-            )
-        } else {
+        onBack = backNav,
+        transition = NavTransitions.MiuixDefault,
+        effects = NavDisplayEffects(
+            cornerClipRadius = rememberNavSystemCornerRadius(),
+            dimAmount = 0.5f,
+        ),
+    ) {
+        entry<NavKey2.SearchHome> {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -150,7 +185,7 @@ fun SearchTab(
         Column(
             modifier = Modifier.padding(
                 start = 12.dp, end = 12.dp,
-                top = innerPadding.calculateTopPadding()
+                top = primaryPadding.calculateTopPadding()
             )
         ) {
             // Search/URL input bar
@@ -293,7 +328,7 @@ fun SearchTab(
                     }
                     SearchCategory.ALBUMS -> {
                         items(listPage(state.searchAlbums, currentPage), key = { it.id }) { album ->
-                            AlbumCard(album = album, onClick = { onAlbumClick(album) })
+                            AlbumCard(album = album, onClick = { onAlbumClickNav(album) })
                         }
                         item {
                             ListPageNavigator(
@@ -309,7 +344,7 @@ fun SearchTab(
                     }
                     SearchCategory.ARTISTS -> {
                         items(listPage(state.searchArtists, currentPage), key = { it.id }) { artist ->
-                            ArtistCard(artist = artist, onClick = { onArtistClick(artist) })
+                            ArtistCard(artist = artist, onClick = { onArtistClickNav(artist) })
                         }
                         item {
                             ListPageNavigator(
@@ -327,7 +362,7 @@ fun SearchTab(
                         items(listPage(state.searchPlaylists, currentPage), key = { it.id }) { playlist ->
                             PlaylistSearchResult(
                                 playlist = playlist,
-                                onClick = { onPlaylistClick(playlist) },
+                                onClick = { onPlaylistClickNav(playlist) },
                             )
                         }
                         item {
@@ -346,7 +381,7 @@ fun SearchTab(
                         items(listPage(state.searchPodcasts, currentPage), key = { it.id }) { podcast ->
                             PodcastSearchResult(
                                 podcast = podcast,
-                                onClick = { onPodcastClick(podcast) },
+                                onClick = { onPodcastClickNav(podcast) },
                             )
                         }
                         item {
@@ -383,7 +418,7 @@ fun SearchTab(
             }
             }
         }
-    }
+        }
 
         if (panelVisible && state.suggestions.isNotEmpty()) {
             SuggestionPanel(
@@ -398,8 +433,30 @@ fun SearchTab(
             )
             }
         }
+        }
+        entry<NavKey2.ArtistDetail> {
+            PageSurface {
+                artistDetailContent()
+            }
+        }
+        entry<NavKey2.SearchResult> {
+            PageSurface {
+                SearchCollectionDetail(
+                    state = state,
+                    songs = sortedSongs,
+                    downloadProgress = downloadProgress,
+                    onToggleSelect = onToggleSelect,
+                    onSelectAll = onSelectAll,
+                    onDownload = onDownload,
+                    onLoadMore = onLoadMore,
+                    onRetry = onRetry,
+                    innerPadding = contextPadding,
+                    scrollToTopTrigger = scrollToTopTrigger,
+                    sortKey = "$sortOption:$sortAscending",
+                )
+            }
+        }
     }
-}
 }
 
 internal fun shouldShowSearchSongControls(state: SearchUiState): Boolean =

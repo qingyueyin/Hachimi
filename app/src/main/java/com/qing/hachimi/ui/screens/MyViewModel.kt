@@ -1,6 +1,7 @@
 package com.qing.hachimi.ui.screens
 
 import androidx.lifecycle.ViewModel
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
@@ -44,6 +45,7 @@ data class UserProfile(
     val avatarUrl: String = "",
 )
 
+@Immutable
 data class MyUiState(
     val section: MySection = MySection.HOME,
     val profile: UserProfile? = null,
@@ -79,7 +81,9 @@ data class MyUiState(
     // Currently viewing songs (playlist detail / album detail / artist top)
     val songs: List<Song> = emptyList(),
     val selectedIds: Set<Long> = emptySet(),
-    val playlistName: String = ""
+    val playlistName: String = "",
+    /** 是否停在歌单详情。导航层级由 MyTab 的返回栈持有，这里只留重建栈所需的最小信息 */
+    val isPlaylistDetail: Boolean = false,
 ) {
     val myPlaylists: List<PlaylistApi.UserPlaylist>
         get() = userPlaylists.filter { !it.subscribed }
@@ -87,8 +91,8 @@ data class MyUiState(
         get() = userPlaylists.filter { it.subscribed }
     val rankEntries: List<ListenDataApi.RecordEntry>
         get() = if (rankType == 0) rankAllEntries else rankWeekEntries
-    val isPlaylistDetail: Boolean
-        get() = songs.isNotEmpty()
+
+    val canNavigateBack: Boolean get() = section != MySection.HOME || isPlaylistDetail
 }
 
 class MyViewModel(
@@ -111,7 +115,7 @@ class MyViewModel(
         if (state.section == MySection.HOME && state.userPlaylists.isNotEmpty()) return
         _uiState.value = state.copy(
             section = MySection.HOME,
-            songs = emptyList(),
+            isPlaylistDetail = false,songs = emptyList(),
             selectedIds = emptySet(),
             playlistName = "",
             statusMessage = null,
@@ -127,6 +131,7 @@ class MyViewModel(
             MySection.LIKED -> {
                 _uiState.value = _uiState.value.copy(
                     section = MySection.LIKED,
+                    isPlaylistDetail = false,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -137,6 +142,7 @@ class MyViewModel(
             MySection.PLAYLISTS -> {
                 _uiState.value = _uiState.value.copy(
                     section = MySection.PLAYLISTS,
+                    isPlaylistDetail = false,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -147,6 +153,7 @@ class MyViewModel(
             MySection.COLLECTED -> {
                 _uiState.value = _uiState.value.copy(
                     section = MySection.COLLECTED,
+                    isPlaylistDetail = false,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -157,6 +164,7 @@ class MyViewModel(
             MySection.CLOUD -> {
                 _uiState.value = _uiState.value.copy(
                     section = MySection.CLOUD,
+                    isPlaylistDetail = false,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -167,6 +175,7 @@ class MyViewModel(
             MySection.RANK -> {
                 _uiState.value = _uiState.value.copy(
                     section = MySection.RANK,
+                    isPlaylistDetail = false,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -177,6 +186,7 @@ class MyViewModel(
             MySection.RECENT -> {
                 _uiState.value = _uiState.value.copy(
                     section = MySection.RECENT,
+                    isPlaylistDetail = false,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -187,6 +197,7 @@ class MyViewModel(
             MySection.FOOTPRINT -> {
                 _uiState.value = _uiState.value.copy(
                     section = MySection.FOOTPRINT,
+                    isPlaylistDetail = false,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -197,6 +208,7 @@ class MyViewModel(
             MySection.COLLECTED_ALBUMS -> {
                 _uiState.value = _uiState.value.copy(
                     section = MySection.COLLECTED_ALBUMS,
+                    isPlaylistDetail = false,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -207,6 +219,7 @@ class MyViewModel(
             MySection.COLLECTED_ARTISTS -> {
                 _uiState.value = _uiState.value.copy(
                     section = MySection.COLLECTED_ARTISTS,
+                    isPlaylistDetail = false,
                     songs = emptyList(),
                     selectedIds = emptySet(),
                     playlistName = "",
@@ -220,7 +233,7 @@ class MyViewModel(
     fun backToHome() {
         _uiState.value = _uiState.value.copy(
             section = MySection.HOME,
-            songs = emptyList(),
+            isPlaylistDetail = false,songs = emptyList(),
             selectedIds = emptySet(),
             playlistName = "",
             statusMessage = null,
@@ -314,7 +327,13 @@ class MyViewModel(
 
     fun loadPlaylistSongs(playlist: PlaylistApi.UserPlaylist) {
         AppLogger.info("[MyVM] loadPlaylistSongs: id=${playlist.id} name=${playlist.name}")
-        _uiState.value = _uiState.value.copy(isLoading = true, statusMessage = null)
+        // 立即进入详情层：以前只在请求成功后由 songs 非空触发，失败时页面根本不动
+        _uiState.value = _uiState.value.copy(
+            isLoading = true,
+            statusMessage = null,
+            isPlaylistDetail = true,
+            playlistName = playlist.name,
+        )
         viewModelScope.launch {
             repository.getPlaylistSongs(playlist.id.toString()).fold(
                 onSuccess = { songs ->
@@ -791,7 +810,33 @@ class MyViewModel(
     }
 
     fun clearSongs() {
-        _uiState.value = _uiState.value.copy(songs = emptyList(), selectedIds = emptySet(), playlistName = "")
+        // 从歌单详情返回：弹出 SONGS 层，回到分类列表
+        _uiState.value = _uiState.value.copy(
+            songs = emptyList(),
+            selectedIds = emptySet(),
+            playlistName = "",
+            isPlaylistDetail = false,
+        )
+    }
+
+    /** 从歌单详情退回分类列表（保留 section） */
+    fun backToSectionList() {
+        _uiState.value = _uiState.value.copy(
+            songs = emptyList(),
+            selectedIds = emptySet(),
+            playlistName = "",
+            isPlaylistDetail = false,
+        )
+    }
+
+    /** 我的页返回上一层 */
+    fun goBack() {
+        val state = _uiState.value
+        when {
+            state.isPlaylistDetail -> backToSectionList()
+            state.section != MySection.HOME -> backToHome()
+            else -> Unit
+        }
     }
 
     fun resetToHome() {

@@ -1,40 +1,22 @@
 package com.qing.hachimi.ui.screens
 
-import androidx.activity.BackEventCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -52,32 +34,26 @@ import com.qing.hachimi.data.local.SettingsManager
 import com.qing.hachimi.data.model.SourceMode
 import com.qing.hachimi.downloader.DownloadProgress
 import com.qing.hachimi.ui.animation.rememberIsReduceMotionEnabled
-import com.qing.hachimi.ui.navigation.AppPredictiveBackHandler
-import com.qing.hachimi.ui.navigation.NavTransitionEasing
-import com.qing.hachimi.ui.theme.AppShapes
+import com.qing.hachimi.ui.navigation.NavKey2
+import com.qing.hachimi.ui.navigation.rememberMainNavBackStack
+import top.yukonga.miuix.kmp.nav.core.NavDisplay
+import top.yukonga.miuix.kmp.nav.core.NavKey
 import com.qing.hachimi.ui.theme.AppSpacing
 import com.qing.hachimi.util.AppLogger
 import com.qing.hachimi.util.HapticLevel
 import com.qing.hachimi.util.BuildChannel
 import com.qing.hachimi.util.OfficialBuild
-import com.qing.hachimi.util.ShareableFile
 import com.qing.hachimi.util.StoragePermissionManager
 import com.qing.hachimi.util.haptic
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.io.File
 import org.json.JSONObject
 import top.yukonga.miuix.kmp.basic.*
-import top.yukonga.miuix.kmp.blur.BlurColors
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.window.WindowDialog
-import top.yukonga.miuix.kmp.basic.NavigationRail
-import top.yukonga.miuix.kmp.basic.NavigationRailItem
-import top.yukonga.miuix.kmp.basic.NavigationRailState
 import top.yukonga.miuix.kmp.basic.NavigationRailValue
 import top.yukonga.miuix.kmp.basic.rememberNavigationRailState
 
@@ -123,12 +99,6 @@ fun MainScreen(
         AppLogger.currentScreen = "Tab.${currentTab.name}"
         viewModel.updateCurrentTab(currentTab.name)
     }
-    var showAppearanceSettings by remember { mutableStateOf(false) }
-    var showDownloadSettings by remember { mutableStateOf(false) }
-    var showAccountSettings by remember { mutableStateOf(false) }
-    var showPreviewFeatures by remember { mutableStateOf(false) }
-    var showAboutSettings by remember { mutableStateOf(false) }
-    var showQualityUpgrade by remember { mutableStateOf(false) }
     var showCookieDialog by remember { mutableStateOf(false) }
     var cookieInput by remember { mutableStateOf("") }
     var cookieError by remember { mutableStateOf<String?>(null) }
@@ -143,12 +113,28 @@ fun MainScreen(
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showBrowserLoginCacheDialog by remember { mutableStateOf(false) }
     var accountHistoryVersion by remember { mutableIntStateOf(0) }
-    var skipTabTransition by remember { mutableStateOf(false) }
-    var skipSettingsTransition by remember { mutableStateOf(false) }
     // 侧边导航栏：够宽或横屏大尺寸时启用（参考 SukiSU），展开状态跟随设置保存。
     // 用户开启了悬浮底栏特效（毛玻璃/液态玻璃）时，优先保留底部悬浮栏，不换成侧边栏。
     val railScreen = rememberIsNavigationRailScreen()
-    val isWide = railScreen && !uiState.blurEffect && !uiState.liquidGlass
+    val useRail = railScreen && !uiState.blurEffect && !uiState.liquidGlass
+    // 宽屏布局与侧边栏是两件事：开了玻璃特效仍然算宽屏，只是底栏不换成侧边栏
+    val isWideLayout = railScreen
+    // 设置页改用导航栈：二级页是栈上的一层，返回由 NavDisplay 处理
+    val navBackStack = rememberMainNavBackStack()
+    // 搜索页的返回栈：由这里持有，顶部返回箭头和 NavDisplay 共用同一个栈
+    val searchNavStack = remember { mutableStateListOf<NavKey>(NavKey2.SearchHome) }
+    val settingsNavTop = navBackStack.lastOrNull() as? NavKey2
+    val showAppearanceSettings = settingsNavTop == NavKey2.AppearanceSettings
+    val showDownloadSettings = settingsNavTop == NavKey2.DownloadSettings
+    val showFileTagSettings = settingsNavTop == NavKey2.FileTagSettings
+    val showAccountSettings = settingsNavTop == NavKey2.AccountSettings
+    val showPreviewFeatures = settingsNavTop == NavKey2.PreviewFeatures
+    val showAboutSettings = settingsNavTop == NavKey2.AboutSettings
+    val showQualityUpgrade = settingsNavTop == NavKey2.QualityUpgrade
+    val pushSettingsPage: (NavKey2) -> Unit = { key -> navBackStack.add(key) }
+    val popSettingsPage: () -> Unit = {
+        if (navBackStack.size > 1) navBackStack.removeAt(navBackStack.lastIndex)
+    }
     val railState = rememberNavigationRailState(
         initialValue = if (settingsManager.navigationRailExpanded) {
             NavigationRailValue.Expanded
@@ -160,18 +146,6 @@ fun MainScreen(
         settingsManager.navigationRailExpanded = railState.isExpanded
     }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(skipTabTransition) {
-        if (skipTabTransition) {
-            delay(1)
-            skipTabTransition = false
-        }
-    }
-    LaunchedEffect(skipSettingsTransition) {
-        if (skipSettingsTransition) {
-            delay(1)
-            skipSettingsTransition = false
-        }
-    }
     val context = LocalContext.current
     val view = LocalView.current
     var lastTabClickTab by remember { mutableStateOf<Tab?>(null) }
@@ -198,12 +172,10 @@ fun MainScreen(
                     Tab.SEARCH -> searchViewModel.resetToHome()
                     Tab.MY -> myViewModel.resetToHome()
                     Tab.SETTINGS -> {
-                        showAccountSettings = false
-                        showAppearanceSettings = false
-                        showDownloadSettings = false
-                        showPreviewFeatures = false
-                        showAboutSettings = false
-                        showQualityUpgrade = false
+                        // 双击设置 Tab：退回设置首页（清掉栈上所有二级页）
+                        while (navBackStack.size > 1) {
+                            navBackStack.removeAt(navBackStack.lastIndex)
+                        }
                         viewModel.scrollToTop()
                     }
                     Tab.DOWNLOADS -> viewModel.scrollToTop()
@@ -318,19 +290,19 @@ fun MainScreen(
     }
 
     // Show back button on SEARCH tab when displaying content from DISCOVER
-    val showSearchBack = currentTab == Tab.SEARCH && uiState.previousSourceMode != SourceMode.SEARCH
+    val showSearchBack = false
 
     val showDiscoverBack = currentTab == Tab.DISCOVER && discoverState.canNavigateBack
     val showMyBack = currentTab == Tab.MY && (myUiState.section != MySection.HOME || myUiState.isPlaylistDetail)
-    val showSearchSubBack = currentTab == Tab.SEARCH && searchState.isDetailView
+    val showSearchSubBack = currentTab == Tab.SEARCH && searchState.canNavigateBack
     val contextBackTarget = resolveContextBackTarget(
         showAppearanceSettings = currentTab == Tab.SETTINGS && showAppearanceSettings,
         showDownloadSettings = currentTab == Tab.SETTINGS && showDownloadSettings,
+        showFileTagSettings = currentTab == Tab.SETTINGS && showFileTagSettings,
         showAccountSettings = currentTab == Tab.SETTINGS && showAccountSettings,
         showPreviewFeatures = currentTab == Tab.SETTINGS && showPreviewFeatures,
         showAboutSettings = currentTab == Tab.SETTINGS && showAboutSettings,
         showQualityUpgrade = currentTab == Tab.SETTINGS && showQualityUpgrade,
-        showSearchBack = showSearchBack,
         showDiscoverBack = showDiscoverBack,
         showMyPlaylistBack = showMyBack,
         showSearchSubBack = showSearchSubBack,
@@ -356,10 +328,27 @@ fun MainScreen(
         }
     }
 
-    val mainBottomContentPadding = floatingContentBottomPadding(
-        systemBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
-        hasFloatingBar = !isWide,
-    )
+    val systemBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val mainBottomContentPadding = when {
+        useRail -> floatingContentBottomPadding(systemBottom, hasFloatingBar = false)
+        uiState.floatingNavigationBar -> floatingContentBottomPadding(systemBottom, hasFloatingBar = true)
+        else -> dockedContentBottomPadding(systemBottom)
+    }
+
+    // 宽屏下按页面类型放宽内容上限：发现页网格铺满，列表/详情次之，其余居中
+    val discoverGridHome = discoverState.currentLevel == DiscoverLevel.HOME &&
+        discoverState.sourceMode in setOf(
+            SourceMode.RECOMMEND,
+            SourceMode.PLAYLISTS,
+            SourceMode.PODCASTS,
+            SourceMode.NEW_ALBUMS,
+        )
+    val contentMaxWidth = when {
+        !isWideLayout -> WideScreenContentMaxWidth
+        currentTab == Tab.DISCOVER -> if (discoverGridHome) 1000.dp else 720.dp
+        currentTab == Tab.SETTINGS -> 900.dp
+        else -> 800.dp
+    }
 
     val backdrop = rememberBlurBackdrop(
         enableBlur = shouldCaptureFloatingBackdrop(uiState.blurEffect, uiState.liquidGlass),
@@ -389,84 +378,50 @@ fun MainScreen(
 
     val performContextBack: () -> Unit = {
         when (contextBackTarget) {
-            ContextBackTarget.APPEARANCE_SETTINGS -> showAppearanceSettings = false
-            ContextBackTarget.DOWNLOAD_SETTINGS -> showDownloadSettings = false
-            ContextBackTarget.ACCOUNT_SETTINGS -> showAccountSettings = false
-            ContextBackTarget.QUALITY_UPGRADE -> showQualityUpgrade = false
-            ContextBackTarget.PREVIEW_FEATURES -> showPreviewFeatures = false
-            ContextBackTarget.ABOUT_SETTINGS -> showAboutSettings = false
-            ContextBackTarget.SEARCH_DETAIL -> searchViewModel.goBack()
-            ContextBackTarget.DISCOVER -> {
-                val returnToSearch = discoverState.shouldReturnToSearch
-                discoverViewModel.goBack()
-                if (returnToSearch) currentTab = Tab.SEARCH
+            ContextBackTarget.APPEARANCE_SETTINGS,
+            ContextBackTarget.DOWNLOAD_SETTINGS,
+            ContextBackTarget.FILE_TAG_SETTINGS,
+            ContextBackTarget.ACCOUNT_SETTINGS,
+            ContextBackTarget.QUALITY_UPGRADE,
+            ContextBackTarget.PREVIEW_FEATURES,
+            ContextBackTarget.ABOUT_SETTINGS,
+            -> popSettingsPage()
+            ContextBackTarget.SEARCH_DETAIL -> {
+                if (searchNavStack.size > 1) searchNavStack.removeAt(searchNavStack.lastIndex)
+                searchViewModel.goBack()
             }
+            ContextBackTarget.DISCOVER -> discoverViewModel.goBack()
             ContextBackTarget.MY_SECTION -> {
-                if (myUiState.isPlaylistDetail) myViewModel.clearSongs() else myViewModel.backToHome()
-            }
-            ContextBackTarget.LEGACY_SEARCH -> {
-                val previousSource = uiState.previousSourceMode
-                viewModel.goBack()
-                if (previousSource != SourceMode.SEARCH && previousSource != SourceMode.ARTIST_DETAIL) {
-                    currentTab = Tab.DISCOVER
+                // 由导航栈决定回哪一层
+                if (myUiState.isPlaylistDetail) {
+                    myViewModel.clearSongs()
+                    myViewModel.backToSectionList()
+                } else {
+                    myViewModel.backToHome()
                 }
             }
             null -> Unit
         }
     }
 
-    // Predictive back: 手势进度直接驱动内容位移/缩放（按钮按压走"无进度立即提交"路径）
-    var backProgress by remember { mutableFloatStateOf(0f) }
-    var backSwipeEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+    // 返回手势与预测性返回动画由各 Tab 的 NavDisplay 统一处理，这里不再手写位移
+    val suppressNavTransition = false
 
-    // Keep last known target alive so background preview is visible during gesture
-    var lastContextBackTarget by remember { mutableStateOf<ContextBackTarget?>(null) }
-    if (contextBackTarget != null) lastContextBackTarget = contextBackTarget
-
-    // 手势提交期间跳过 tab 内部层级过渡（手势本身就是过渡）
-    var suppressNavTransition by remember { mutableStateOf(false) }
-
-    var backCommitPending by remember { mutableStateOf(false) }
-    val latestContextBackTarget by rememberUpdatedState(contextBackTarget)
-    LaunchedEffect(backCommitPending) {
-        if (!backCommitPending) return@LaunchedEffect
-        var waitedFrames = 0
-        while (latestContextBackTarget != null && waitedFrames < 6) {
-            withFrameNanos { }
-            waitedFrames++
+    val topChromeFadeDistancePx = with(density) {
+        (if (showContextHeader) 44.dp + 96.dp else AppSpacing.sm + 56.dp).toPx()
+    }
+    // 顶部磨砂的进度：0 = 完全透明，1 = 不透明。
+    // 只在绘制阶段读取滚动值；如果在组合里读，滚动每变化一像素都会重组整个主界面。
+    val topChromeProgress: () -> Float = {
+        if (showContextHeader || currentTab != Tab.SEARCH) {
+            (topChromeScrollOffset.floatValue / topChromeFadeDistancePx).coerceIn(0f, 1f)
+        } else {
+            0f
         }
-        lastContextBackTarget = null
-        backProgress = 0f
-        withFrameNanos { }
-        suppressNavTransition = false
-        backCommitPending = false
     }
 
-    AppPredictiveBackHandler(
-        enabled = contextBackTarget != null,
-        onBackProgress = { event ->
-            if (backCommitPending) {
-                backCommitPending = false
-                suppressNavTransition = false
-            }
-            backProgress = event.progress
-            backSwipeEdge = event.swipeEdge
-        },
-        onBackSettled = {
-            if (!backCommitPending) {
-                lastContextBackTarget = null
-                backProgress = 0f
-            }
-        },
-        onBack = {
-            backCommitPending = true
-            suppressNavTransition = true
-            performContextBack()
-        },
-    )
-
     Row(modifier = Modifier.fillMaxSize()) {
-        if (isWide) {
+        if (useRail) {
             MainNavigationRail(
                 currentTab = currentTab,
                 isLoggedIn = uiState.isLoggedIn,
@@ -479,50 +434,11 @@ fun MainScreen(
             .weight(1f)
             .fillMaxHeight()
     ) {
-        // Background preview: shows target page during predictive back gesture
-        if (backProgress > 0f && lastContextBackTarget != null) {
-            val target = lastContextBackTarget!!
-            val previewInsets = WindowInsets.systemBars.asPaddingValues()
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(colorScheme.surface)
-                    .graphicsLayer {
-                        val direction = if (backSwipeEdge == BackEventCompat.EDGE_RIGHT) -1f else 1f
-                        val screenWidth = android.content.res.Resources.getSystem().displayMetrics.widthPixels.toFloat()
-                        translationX = screenWidth * direction * (1f - NavTransitionEasing.transform(backProgress))
-                    }
-            ) {
-                ContextBackPreview(
-                    target = target,
-                    uiState = uiState,
-                    viewModel = viewModel,
-                    searchViewModel = searchViewModel,
-                    discoverViewModel = discoverViewModel,
-                    myViewModel = myViewModel,
-                    currentTab = currentTab,
-                    innerPadding = PaddingValues(
-                        top = previewInsets.calculateTopPadding() + AppSpacing.sm,
-                        bottom = previewInsets.calculateBottomPadding(),
-                        start = previewInsets.calculateStartPadding(LocalLayoutDirection.current),
-                        end = previewInsets.calculateEndPadding(LocalLayoutDirection.current),
-                    ),
-                )
-            }
-        }
 
         // Foreground
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer {
-                    val direction = if (backSwipeEdge == BackEventCompat.EDGE_RIGHT) 1f else -1f
-                    val screenWidth = android.content.res.Resources.getSystem().displayMetrics.widthPixels.toFloat()
-                    translationX = screenWidth * direction * NavTransitionEasing.transform(backProgress)
-                    val scale = 1f - backProgress * 0.05f
-                    scaleX = scale
-                    scaleY = scale
-                }
         ) {
         CompositionLocalProvider(LocalSuppressNavTransition provides suppressNavTransition) {
         Scaffold(
@@ -533,8 +449,12 @@ fun MainScreen(
                         customTitle = when {
                             showDiscoverBack -> discoverState.navigationTitle
                             showSearchSubBack -> searchState.playlistName.ifEmpty { "歌曲" }
-                            else -> currentTab.label
+                            else -> settingsNavTop.settingsTitle() ?: currentTab.label
                         },
+                        // 详情页的内容顶部本来就有大标题，磨砂栏的标题跟着滚动渐显，避免同一屏出现两遍
+                        titleAlpha = if (
+                            (showDiscoverBack && discoverState.isDetailView) || showSearchSubBack
+                        ) topChromeProgress else { { 1f } },
                         actions = {
                             if (
                                 showDiscoverBack &&
@@ -567,7 +487,7 @@ fun MainScreen(
                     CompositionLocalProvider(
                         LocalMainBottomContentPadding provides mainBottomContentPadding,
                     ) {
-                        WidthLimiter {
+                        WidthLimiter(maxWidth = contentMaxWidth) {
                             TabContent(
                     currentTab = currentTab,
                     uiState = uiState,
@@ -577,11 +497,14 @@ fun MainScreen(
                     upgradeViewModel = upgradeViewModel,
                     downloadProgress = downloadProgress,
                     viewModel = viewModel,
+                    navBackStack = navBackStack,
+                    searchNavStack = searchNavStack,
+                    onPopSettingsPage = popSettingsPage,
                     innerPadding = innerPadding,
+                    isWideLayout = isWideLayout,
                     onOpenDownloadedFile = onOpenDownloadedFile,
                     onPickDownloadDir = onPickDownloadDir,
                     onPickMusicFolder = onPickMusicFolder,
-                    onSwitchToDiscover = { currentTab = Tab.DISCOVER },
                     onMyBack = performContextBack,
                     onBrowserLoginClick = openBrowserLogin,
                     onCookieLoginClick = { openCookieLoginDialog(1) },
@@ -607,30 +530,23 @@ fun MainScreen(
                         showExportDialog = true
                     },
                     context = context,
-                    showAppearanceSettings = showAppearanceSettings,
-                    showDownloadSettings = showDownloadSettings,
-                    showAccountSettings = showAccountSettings,
-                    showPreviewFeatures = showPreviewFeatures,
-                    showAboutSettings = showAboutSettings,
-                    showQualityUpgrade = showQualityUpgrade,
-                    onOpenAppearanceSettings = { showAppearanceSettings = true },
-                    onOpenDownloadSettings = { showDownloadSettings = true },
-                    onOpenAccountSettings = { showAccountSettings = true },
-                    onOpenPreviewFeatures = { showPreviewFeatures = true },
-                    onOpenAboutSettings = { showAboutSettings = true },
-                    onOpenQualityUpgrade = { showPreviewFeatures = true; showQualityUpgrade = true },
+                    onOpenAppearanceSettings = { pushSettingsPage(NavKey2.AppearanceSettings) },
+                    onOpenDownloadSettings = { pushSettingsPage(NavKey2.DownloadSettings) },
+                    onOpenFileTagSettings = { pushSettingsPage(NavKey2.FileTagSettings) },
+                    onOpenAccountSettings = { pushSettingsPage(NavKey2.AccountSettings) },
+                    onOpenPreviewFeatures = { pushSettingsPage(NavKey2.PreviewFeatures) },
+                    onOpenQualityUpgrade = { pushSettingsPage(NavKey2.QualityUpgrade) },
+                    onClosePreviewFeatures = performContextBack,
+                    onOpenAboutSettings = { pushSettingsPage(NavKey2.AboutSettings) },
                     onCloseAppearanceSettings = performContextBack,
                     onCloseDownloadSettings = performContextBack,
+                    onCloseFileTagSettings = performContextBack,
                     onCloseAccountSettings = performContextBack,
-                    onClosePreviewFeatures = performContextBack,
                     onCloseAboutSettings = performContextBack,
-                    onCloseQualityUpgrade = performContextBack,
                     onToggleBlurEffect = viewModel::toggleBlurEffect,
                     onToggleLiquidGlass = viewModel::toggleLiquidGlass,
                     onImportClick = { showImportDialog = true },
                     onOpenStoragePermissionSettings = openStoragePermissionSettings,
-                    skipTabTransition = skipTabTransition,
-                    skipSettingsTransition = skipSettingsTransition,
                     sessionStartedAt = downloadSessionStartedAt,
                     topChromeScrollOffset = topChromeScrollOffset,
                         )
@@ -644,26 +560,11 @@ fun MainScreen(
                 // topBar 在 Scaffold 中被绘制在此层之上，标题保持清晰。
                 // 搜索主页顶部有冻结的搜索框（自带背景），无需磨砂，强制隐藏；
                 // 搜索详情页（showContextHeader）仍保留磨砂以支持透明标题栏。
-                val topChromeFadeDistancePx = with(density) {
-                    (if (showContextHeader) 44.dp + 96.dp else AppSpacing.sm + 56.dp).toPx()
-                }
-                val topChromeTarget = if (showContextHeader || currentTab != Tab.SEARCH) {
-                    (topChromeScrollOffset.floatValue / topChromeFadeDistancePx).coerceIn(0f, 1f)
-                } else 0f
-                val topChromeAlpha by animateFloatAsState(
-                    targetValue = topChromeTarget,
-                    animationSpec = if (suppressNavTransition) {
-                        snap()
-                    } else {
-                        tween(durationMillis = 220, easing = FastOutSlowInEasing)
-                    },
-                    label = "TopChromeAlpha",
-                )
                 TopChromeOverlay(
                     backdrop = backdrop.takeIf { uiState.blurEffect },
                     headerHeight = if (showContextHeader) 44.dp else AppSpacing.sm,
                     fadeExtension = if (showContextHeader) 96.dp else 56.dp,
-                    progress = topChromeAlpha,
+                    progress = topChromeProgress,
                     modifier = Modifier.align(Alignment.TopCenter),
                 )
             }
@@ -671,102 +572,66 @@ fun MainScreen(
         }
         }
 
-        // 底部操作区（Bottom bar），置于前景之外，实时模糊始终正确；宽屏由左侧导航栏接管
-        //
-        // 预测性返回手势期间前景层被平移+缩小，而实时模糊取的是这份画面，
-        // 会让底部栏看起来跟着动、模糊错位、松手瞬间跳位。手势中改为纯色样式（不读画面），
-        // 提交后 backProgress 归零、恢复模糊只发生在同一帧内，不会出现可见跳变。
-        if (!isWide) {
-            MainBottomBar(
-                modifier = Modifier.align(Alignment.BottomCenter),
-                currentTab = currentTab,
-                isLoggedIn = uiState.isLoggedIn,
-                backdrop = backdrop.takeIf { backProgress == 0f },
-                isBlurEnabled = uiState.blurEffect,
-                isLiquidGlassEnabled = uiState.liquidGlass,
-                onTabChange = onTabClick,
-            )
+        // 底部操作区位于导航动画层之外，返回手势时原地不动；实时模糊取的是其下方真实内容
+        if (!useRail) {
+            if (uiState.floatingNavigationBar) {
+                MainBottomBar(
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    currentTab = currentTab,
+                    isLoggedIn = uiState.isLoggedIn,
+                    backdrop = backdrop,
+                    isBlurEnabled = uiState.blurEffect,
+                    isLiquidGlassEnabled = uiState.liquidGlass,
+                    onTabChange = onTabClick,
+                )
+            } else {
+                MainDockedNavigationBar(
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    currentTab = currentTab,
+                    isLoggedIn = uiState.isLoggedIn,
+                    onTabChange = onTabClick,
+                )
+            }
         }
     }
     }
 
     // Dialogs live outside Scaffold, so use window dialogs instead of Scaffold-hosted overlays.
-    WindowDialog(
+    CookieLoginDialog(
         show = showCookieDialog,
-        title = if (loginMode == 0) "MUSIC_U 登录" else "Cookie 登录",
-        summary = if (loginMode == 0) "直接粘贴 MUSIC_U 值即可" else "从浏览器复制完整 Cookie 后粘贴",
-        onDismissRequest = {
+        loginMode = loginMode,
+        input = cookieInput,
+        error = cookieError,
+        onInputChange = { cookieInput = it; cookieError = null },
+        onDismiss = {
             showCookieDialog = false
             cookieInput = ""
             cookieError = null
-        }
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-            // TextField
-            TextField(
-                value = cookieInput,
-                onValueChange = { cookieInput = it; cookieError = null },
-                label = if (cookieError != null) cookieError!!
-                    else if (loginMode == 0) "粘贴 MUSIC_U 值"
-                    else "MUSIC_U=xxx; __csrf=xxx; ...",
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
-                maxLines = 6
-            )
-
-            if (cookieError != null) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    cookieError!!,
-                    color = colorScheme.error,
-                    style = MiuixTheme.textStyles.body2
-                )
+        },
+        onCancel = {
+            showCookieDialog = false
+            cookieInput = ""
+            cookieError = null
+        },
+        onConfirm = {
+            AppLogger.debug("Cookie login attempt, mode=$loginMode")
+            val result = if (loginMode == 0) {
+                viewModel.saveMusicUDirect(cookieInput.trim())
+            } else {
+                viewModel.saveCookies(cookieInput.trim())
             }
-
-            Spacer(Modifier.height(16.dp))
-
-            // Action buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(
-                    text = "取消",
-                    onClick = {
-                        showCookieDialog = false
-                        cookieInput = ""
-                        cookieError = null
-                    }
-                )
-                Spacer(Modifier.width(12.dp))
-                Button(
-                    onClick = {
-                        AppLogger.debug("Cookie login attempt, mode=$loginMode")
-                        val result = if (loginMode == 0) {
-                            viewModel.saveMusicUDirect(cookieInput.trim())
-                        } else {
-                            viewModel.saveCookies(cookieInput.trim())
-                        }
-                        if (result) {
-                            discoverViewModel.clearPrivateContent()
-                            myViewModel.clearAccountContent()
-                            showCookieDialog = false
-                            cookieInput = ""
-                            cookieError = null
-                        } else {
-                            cookieError = uiState.statusMessage ?: "格式错误"
-                            AppLogger.warn("Cookie login failed: ${cookieError}")
-                        }
-                    }
-                ) {
-                    Text("登录")
-                }
+            if (result) {
+                discoverViewModel.clearPrivateContent()
+                myViewModel.clearAccountContent()
+                showCookieDialog = false
+                cookieInput = ""
+                cookieError = null
+            } else {
+                cookieError = uiState.statusMessage ?: "格式错误"
+                AppLogger.warn("Cookie login failed: ${cookieError}")
             }
-
-            Spacer(Modifier.height(8.dp))
-        }
-    }
+        },
+    )
 
     DisclaimerDialog(
         show = showDisclaimerDialog,
@@ -822,439 +687,109 @@ fun MainScreen(
     }
 
     // Storage permission dialog (Android 11+)
-    WindowDialog(
+    StoragePermissionDialog(
         show = showPermissionDialog,
-        title = "存储权限",
-        summary = "保存到公共目录需要「所有文件访问权限」。请在接下来的系统页面中开启此权限。未授权时下载会失败。" +
-            (storageCompatLayer?.let { "\n\n检测到 $it 环境：若找不到对应开关，请到 $it 的应用设置中开启。" } ?: ""),
-        onDismissRequest = { showPermissionDialog = false }
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(
-                text = "稍后",
-                onClick = { showPermissionDialog = false }
-            )
-            Spacer(Modifier.width(12.dp))
-            Button(
-                onClick = {
-                    showPermissionDialog = false
-                    openStoragePermissionSettings()
-                }
-            ) {
-                Text("去授权")
-            }
-        }
-    }
+        storageCompatLayer = storageCompatLayer,
+        onDismiss = { showPermissionDialog = false },
+        onOpenSettings = {
+            showPermissionDialog = false
+            openStoragePermissionSettings()
+        },
+    )
 
-    // Re-login dialog
-    WindowDialog(
+    ReloginDialog(
         show = showReloginDialog,
-        title = "已登录",
-        summary = "是否清除 WebView 缓存重新登录？",
-        onDismissRequest = { showReloginDialog = false }
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(
-                text = "取消",
-                onClick = { showReloginDialog = false }
-            )
-            Spacer(Modifier.width(12.dp))
-            Button(
-                onClick = {
-                    showReloginDialog = false
-                    val intent = Intent(context, NeteaseWebLoginActivity::class.java)
-                    intent.putExtra(NeteaseWebLoginActivity.EXTRA_CLEAR_CACHE, true)
-                    webLoginLauncher.launch(intent)
-                }
-            ) {
-                Text("重新登录")
-            }
-        }
-    }
+        onDismiss = { showReloginDialog = false },
+        onRelogin = {
+            showReloginDialog = false
+            val intent = Intent(context, NeteaseWebLoginActivity::class.java)
+            intent.putExtra(NeteaseWebLoginActivity.EXTRA_CLEAR_CACHE, true)
+            webLoginLauncher.launch(intent)
+        },
+    )
 
-    WindowDialog(
+    LogoutDialog(
         show = showLogoutDialog,
-        title = "退出登录",
-        summary = "将清除本机保存的登录状态和当前账户内容。下载记录不会受影响。",
-        onDismissRequest = { showLogoutDialog = false }
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(
-                text = "取消",
-                onClick = { showLogoutDialog = false }
-            )
-            Spacer(Modifier.width(12.dp))
-            Button(
-                onClick = {
-                    showLogoutDialog = false
-                    viewModel.logout()
-                    discoverViewModel.clearPrivateContent()
-                    myViewModel.clearAccountContent()
-                    showCookieDialog = false
-                },
-                colors = ButtonDefaults.buttonColors(
-                    color = colorScheme.error,
-                    contentColor = colorScheme.onError,
-                )
-            ) {
-                Text("退出")
-            }
-        }
-    }
+        onDismiss = { showLogoutDialog = false },
+        onConfirm = {
+            showLogoutDialog = false
+            viewModel.logout()
+            discoverViewModel.clearPrivateContent()
+            myViewModel.clearAccountContent()
+            showCookieDialog = false
+        },
+    )
+    // Re-login dialog
 
     // Export account data dialog
-    WindowDialog(
+    ExportAccountDialog(
         show = showExportDialog,
-        title = "导出账户数据",
-        summary = "请妥善保管，不要泄露给他人",
-        summaryColor = colorScheme.error,
-        onDismissRequest = { showExportDialog = false }
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-            // Scrollable text area
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 240.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(colorScheme.surfaceContainer)
-                    .padding(12.dp),
-            ) {
-                Text(
-                    text = exportedData,
-                    style = MiuixTheme.textStyles.body2,
-                    color = colorScheme.onSurface
-                )
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row {
-                    // Copy button
-                    Button(
-                        onClick = {
-                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Hachimi账户数据", exportedData))
-                        }
-                    ) {
-                        Text("复制")
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    // Share button
-                    Button(
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, exportedData)
-                            }
-                            context.startActivity(Intent.createChooser(intent, "分享账户数据"))
-                        }
-                    ) {
-                        Text("分享")
-                    }
-                }
-                TextButton(
-                    text = "关闭",
-                    onClick = { showExportDialog = false }
-                )
-            }
-
-            Spacer(Modifier.height(8.dp))
-        }
-    }
+        exportedData = exportedData,
+        onDismiss = { showExportDialog = false },
+    )
 
     // Import account data dialog
-    WindowDialog(
+    ImportAccountDialog(
         show = showImportDialog,
-        title = "导入账户数据",
-        summary = "粘贴之前导出的完整账户数据",
-        onDismissRequest = {
+        input = importInput,
+        error = importError,
+        onInputChange = { importInput = it; importError = null },
+        onDismiss = {
             showImportDialog = false
             importInput = ""
             importError = null
-        }
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-            // 输入框
-            TextField(
-                value = importInput,
-                onValueChange = { importInput = it; importError = null },
-                label = importError ?: "粘贴导出的数据",
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 8,
-                maxLines = 12
-            )
-
-            if (importError != null) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    importError!!,
-                    color = colorScheme.error,
-                    style = MiuixTheme.textStyles.body2
-                )
+        },
+        onCancel = {
+            showImportDialog = false
+            importInput = ""
+            importError = null
+        },
+        onConfirm = {
+            val result = viewModel.importAccountData(importInput.trim())
+            if (result) {
+                showImportDialog = false
+                importInput = ""
+                importError = null
+            } else {
+                importError = uiState.statusMessage ?: "导入失败：数据格式错误"
             }
-
-            Spacer(Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(
-                    text = "取消",
-                    onClick = {
-                        showImportDialog = false
-                        importInput = ""
-                        importError = null
-                    }
-                )
-                Spacer(Modifier.width(12.dp))
-                Button(
-                    onClick = {
-                        val result = viewModel.importAccountData(importInput.trim())
-                        if (result) {
-                            showImportDialog = false
-                            importInput = ""
-                            importError = null
-                        } else {
-                            importError = uiState.statusMessage ?: "导入失败：数据格式错误"
-                        }
-                    }
-                ) {
-                    Text("导入")
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-        }
-    }
+        },
+    )
 
     // 浏览器登录缓存询问对话框
-    WindowDialog(
+    val accountHistory = remember(showBrowserLoginCacheDialog, accountHistoryVersion) {
+        viewModel.getAccountHistory()
+    }
+    BrowserLoginDialog(
         show = showBrowserLoginCacheDialog,
-        title = "浏览器登录",
-        summary = "选择账号或新建登录",
-        onDismissRequest = { showBrowserLoginCacheDialog = false }
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(horizontal = 20.dp)
-                .heightIn(max = 500.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // 历史账号列表
-            val accounts = remember(showBrowserLoginCacheDialog, accountHistoryVersion) {
-                viewModel.getAccountHistory()
+        accounts = accountHistory,
+        onDismiss = { showBrowserLoginCacheDialog = false },
+        onSwitchAccount = { account ->
+            showBrowserLoginCacheDialog = false
+            if (viewModel.switchToAccount(account)) {
+                discoverViewModel.clearPrivateContent()
+                myViewModel.clearAccountContent()
+                Toast.makeText(context, "已切换到 ${account.nickname}", Toast.LENGTH_SHORT).show()
             }
-
-            if (accounts.isNotEmpty()) {
-                Text(
-                    "历史账号",
-                    style = MiuixTheme.textStyles.body1,
-                    fontWeight = FontWeight.Medium,
-                    color = colorScheme.onSurface
-                )
-
-                Spacer(Modifier.height(4.dp))
-
-                // 大屏对话框限高为窗口 2/3：列表按剩余空间伸缩，保证底部登录按钮不被裁掉
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .heightIn(max = 200.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(accounts.size) { index ->
-                        val account = accounts[index]
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(colorScheme.secondaryContainer, RoundedCornerShape(12.dp))
-                                .clickable {
-                                    showBrowserLoginCacheDialog = false
-                                    if (viewModel.switchToAccount(account)) {
-                                        discoverViewModel.clearPrivateContent()
-                                        myViewModel.clearAccountContent()
-                                        Toast.makeText(context, "已切换到 ${account.nickname}", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        account.nickname,
-                                        fontWeight = FontWeight.Medium,
-                                        color = colorScheme.onSecondaryContainer
-                                    )
-                                    Text(
-                                        "UID: ${account.userId}",
-                                        style = MiuixTheme.textStyles.body2,
-                                        color = colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                                    )
-                                }
-                                IconButton(
-                                    onClick = {
-                                        viewModel.deleteAccountHistory(account.userId)
-                                        accountHistoryVersion++
-                                    }
-                                ) {
-                                    Icon(
-                                        imageVector = MiuixIcons.Delete,
-                                        contentDescription = "删除",
-                                        tint = colorScheme.error
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 8.dp),
-                    color = colorScheme.outline.copy(alpha = 0.3f)
-                )
-            }
-
-            // 快速登录（保留缓存）
-            Button(
-                onClick = {
-                    showBrowserLoginCacheDialog = false
-                    webLoginLauncher.launch(Intent(context, NeteaseWebLoginActivity::class.java))
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("快速登录", fontWeight = FontWeight.Medium)
-                    Text(
-                        "使用浏览器缓存（如果可用）",
-                        style = MiuixTheme.textStyles.body2,
-                        color = colorScheme.onPrimary.copy(alpha = 0.95f)
-                    )
-                }
-            }
-
-            // 清除缓存重新登录
-            Button(
-                onClick = {
-                    showBrowserLoginCacheDialog = false
-                    val intent = Intent(context, NeteaseWebLoginActivity::class.java)
-                    intent.putExtra(NeteaseWebLoginActivity.EXTRA_CLEAR_CACHE, true)
-                    webLoginLauncher.launch(intent)
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    color = colorScheme.secondaryContainer,
-                    contentColor = colorScheme.onSecondaryContainer
-                )
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("新账号登录", fontWeight = FontWeight.Medium)
-                    Text(
-                        "清除浏览器缓存，重新登录",
-                        style = MiuixTheme.textStyles.body2,
-                        color = colorScheme.onSecondaryContainer.copy(alpha = 0.95f)
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-        }
-    }
-}
-
-
-@Composable
-private fun MainNavigationRail(
-    currentTab: Tab,
-    isLoggedIn: Boolean,
-    railState: NavigationRailState,
-    onTabChange: (Tab) -> Unit,
-) {
-    val visibleTabs = visibleMainTabs(isLoggedIn)
-    NavigationRail(
-        state = railState,
-        color = colorScheme.surface,
-        expandContentDescription = "展开导航栏",
-        collapseContentDescription = "收起导航栏",
-    ) {
-        visibleTabs.forEach { tab ->
-            NavigationRailItem(
-                selected = tab == currentTab,
-                onClick = { onTabChange(tab) },
-                icon = tab.icon,
-                label = tab.label,
-            )
-        }
-    }
-}
-
-@Composable
-private fun MainBottomBar(
-    modifier: Modifier = Modifier,
-    currentTab: Tab,
-    isLoggedIn: Boolean,
-    backdrop: top.yukonga.miuix.kmp.blur.LayerBackdrop?,
-    isBlurEnabled: Boolean,
-    isLiquidGlassEnabled: Boolean,
-    onTabChange: (Tab) -> Unit,
-) {
-    val visibleTabs = visibleMainTabs(isLoggedIn)
-    val selectedTabIndex = visibleTabs.indexOf(currentTab).coerceAtLeast(0)
-    BlurNavigationBar(
-        modifier = modifier,
-        backdrop = backdrop,
-        selectedIndex = selectedTabIndex,
-        itemCount = visibleTabs.size,
-        isBlurEnabled = isBlurEnabled,
-        isLiquidGlassEnabled = isLiquidGlassEnabled,
-        onSelectedIndexChange = { index ->
-            visibleTabs.getOrNull(index)?.let(onTabChange)
         },
-    ) {
-        visibleTabs.forEachIndexed { index, tab ->
-            BlurNavigationBarItem(
-                index = index,
-                selected = tab == currentTab,
-                onClick = { onTabChange(tab) },
-                icon = {
-                    Icon(
-                        imageVector = tab.icon,
-                        contentDescription = tab.label,
-                        modifier = Modifier.size(22.dp),
-                    )
-                },
-                label = tab.label,
-            )
-        }
-    }
+        onDeleteAccount = { account ->
+            viewModel.deleteAccountHistory(account.userId)
+            accountHistoryVersion++
+        },
+        onQuickLogin = {
+            showBrowserLoginCacheDialog = false
+            webLoginLauncher.launch(Intent(context, NeteaseWebLoginActivity::class.java))
+        },
+        onNewLogin = {
+            showBrowserLoginCacheDialog = false
+            val intent = Intent(context, NeteaseWebLoginActivity::class.java)
+            intent.putExtra(NeteaseWebLoginActivity.EXTRA_CLEAR_CACHE, true)
+            webLoginLauncher.launch(intent)
+        },
+    )
 }
+
+
 
 private fun parseCookieJson(json: String): Map<String, String> {
     return runCatching {
@@ -1270,40 +805,52 @@ private fun parseCookieJson(json: String): Map<String, String> {
 }
 
 internal enum class ContextBackTarget(val usesContextHeader: Boolean) {
-    APPEARANCE_SETTINGS(false),
-    DOWNLOAD_SETTINGS(false),
-    ACCOUNT_SETTINGS(false),
-    PREVIEW_FEATURES(false),
-    ABOUT_SETTINGS(false),
-    QUALITY_UPGRADE(false),
+    APPEARANCE_SETTINGS(true),
+    DOWNLOAD_SETTINGS(true),
+    FILE_TAG_SETTINGS(true),
+    ACCOUNT_SETTINGS(true),
+    PREVIEW_FEATURES(true),
+    ABOUT_SETTINGS(true),
+    QUALITY_UPGRADE(true),
     SEARCH_DETAIL(true),
     DISCOVER(true),
     MY_SECTION(false),
-    LEGACY_SEARCH(true),
+}
+
+/** 设置二级页在磨砂标题栏里显示的名字 */
+private fun NavKey2?.settingsTitle(): String? = when (this) {
+    NavKey2.AppearanceSettings -> "外观"
+    NavKey2.DownloadSettings -> "下载"
+    NavKey2.FileTagSettings -> "文件与标签"
+    NavKey2.AccountSettings -> "账户"
+    NavKey2.AboutSettings -> "关于"
+    NavKey2.PreviewFeatures -> "预览功能"
+    NavKey2.QualityUpgrade -> "音质升级"
+    else -> null
 }
 
 internal fun resolveContextBackTarget(
     showAppearanceSettings: Boolean,
     showDownloadSettings: Boolean,
     showAccountSettings: Boolean,
-    showSearchBack: Boolean,
     showDiscoverBack: Boolean,
     showMyPlaylistBack: Boolean,
     showSearchSubBack: Boolean,
     showPreviewFeatures: Boolean = false,
     showAboutSettings: Boolean = false,
     showQualityUpgrade: Boolean = false,
+    showFileTagSettings: Boolean = false,
 ): ContextBackTarget? = when {
     showQualityUpgrade -> ContextBackTarget.QUALITY_UPGRADE
     showPreviewFeatures -> ContextBackTarget.PREVIEW_FEATURES
     showAboutSettings -> ContextBackTarget.ABOUT_SETTINGS
     showAppearanceSettings -> ContextBackTarget.APPEARANCE_SETTINGS
     showDownloadSettings -> ContextBackTarget.DOWNLOAD_SETTINGS
+    showFileTagSettings -> ContextBackTarget.FILE_TAG_SETTINGS
     showAccountSettings -> ContextBackTarget.ACCOUNT_SETTINGS
     showSearchSubBack -> ContextBackTarget.SEARCH_DETAIL
     showDiscoverBack -> ContextBackTarget.DISCOVER
     showMyPlaylistBack -> ContextBackTarget.MY_SECTION
-    showSearchBack -> ContextBackTarget.LEGACY_SEARCH
     else -> null
 }
 
@@ -1362,105 +909,6 @@ internal fun calculateTopChromeScrollOffset(
     consumedY: Float,
 ): Float = (currentOffset - consumedY).coerceAtLeast(0f)
 
-@Composable
-private fun PrimaryPageTopInset() {
-    TopChrome {
-        Column {
-            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-            Spacer(Modifier.height(AppSpacing.sm))
-        }
-    }
-}
-
-@Composable
-private fun ContextPageHeader(
-    onBackClick: () -> Unit,
-    customTitle: String,
-    actions: @Composable RowScope.() -> Unit = {},
-) {
-    TopChrome {
-        Column {
-            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-            SecondaryPageHeader(
-                title = customTitle,
-                onBack = onBackClick,
-                actions = actions,
-            )
-        }
-    }
-}
-
-@Composable
-private fun TopChrome(
-    content: @Composable () -> Unit,
-) {
-    Box(modifier = Modifier.fillMaxWidth()) {
-        content()
-    }
-}
-
-/**
- * 顶部渐变模糊层。
- *
- * 覆盖在页面内容之上、标题栏之下，从状态栏一直向下延伸一段距离，
- * 让标题和从标题下滚过的内容都落在同一条模糊渐变上，过渡更自然。
- */
-@Composable
-private fun TopChromeOverlay(
-    backdrop: LayerBackdrop?,
-    headerHeight: Dp,
-    fadeExtension: Dp,
-    progress: Float = 1f,
-    modifier: Modifier = Modifier,
-) {
-    val density = LocalDensity.current
-    val surface = colorScheme.surface
-    val bodyTint = surface.copy(alpha = if (backdrop != null) 0.28f else 0.78f)
-    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val solidHeight = statusBarHeight + headerHeight
-    val totalHeight = solidHeight + fadeExtension
-    val solidFraction = (solidHeight / totalHeight).coerceIn(0f, 1f)
-    // 标题区域保持不透，再向下平滑淡出，避免滚动时出现生硬截断
-    val chromeMask = Brush.verticalGradient(
-        0f to androidx.compose.ui.graphics.Color.Black,
-        solidFraction to androidx.compose.ui.graphics.Color.Black,
-        1f to androidx.compose.ui.graphics.Color.Transparent,
-    )
-    val chromeTint = Brush.verticalGradient(
-        0f to bodyTint,
-        solidFraction to bodyTint,
-        1f to surface.copy(alpha = 0f),
-    )
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(totalHeight)
-            .graphicsLayer { alpha = progress },
-    ) {
-        if (backdrop != null) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .textureBlur(
-                        backdrop = backdrop,
-                        shape = RectangleShape,
-                        blurRadius = with(density) { 24.dp.toPx() },
-                        colors = BlurColors(saturation = 1.08f),
-                        contentBlendMode = BlendMode.DstIn,
-                    )
-                    .background(chromeMask),
-            )
-        }
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .drawBehind {
-                    drawRect(brush = chromeTint, size = size)
-                },
-        )
-    }
-}
 
 
 @Composable
@@ -1473,11 +921,13 @@ private fun TabContent(
     searchViewModel: SearchViewModel,
     myViewModel: MyViewModel,
     upgradeViewModel: UpgradeViewModel,
+    navBackStack: androidx.compose.runtime.snapshots.SnapshotStateList<NavKey>,
+    searchNavStack: androidx.compose.runtime.snapshots.SnapshotStateList<NavKey>,
+    onPopSettingsPage: () -> Unit,
     innerPadding: PaddingValues,
     onOpenDownloadedFile: (Long) -> Unit,
     onPickDownloadDir: () -> Unit,
     onPickMusicFolder: () -> Unit,
-    onSwitchToDiscover: () -> Unit,
     onMyBack: () -> Unit,
     onBrowserLoginClick: () -> Unit,
     onCookieLoginClick: () -> Unit,
@@ -1485,32 +935,26 @@ private fun TabContent(
     onLogout: () -> Unit,
     onExportCookies: () -> Unit,
     context: android.content.Context,
-    showAppearanceSettings: Boolean,
-    showDownloadSettings: Boolean,
-    showAccountSettings: Boolean,
-    showPreviewFeatures: Boolean = false,
-    showAboutSettings: Boolean = false,
-    showQualityUpgrade: Boolean = false,
     onOpenAppearanceSettings: () -> Unit,
     onOpenDownloadSettings: () -> Unit,
+    onOpenFileTagSettings: () -> Unit = {},
     onOpenAccountSettings: () -> Unit,
     onOpenPreviewFeatures: () -> Unit = {},
-    onOpenAboutSettings: () -> Unit = {},
     onOpenQualityUpgrade: () -> Unit = {},
+    onClosePreviewFeatures: () -> Unit = {},
+    onOpenAboutSettings: () -> Unit = {},
     onCloseAppearanceSettings: () -> Unit,
     onCloseDownloadSettings: () -> Unit,
+    onCloseFileTagSettings: () -> Unit = {},
     onCloseAccountSettings: () -> Unit,
-    onClosePreviewFeatures: () -> Unit = {},
     onCloseAboutSettings: () -> Unit = {},
-    onCloseQualityUpgrade: () -> Unit = {},
     onToggleBlurEffect: () -> Unit = {},
     onToggleLiquidGlass: () -> Unit = {},
     onImportClick: () -> Unit,
     onOpenStoragePermissionSettings: () -> Unit = {},
-    skipTabTransition: Boolean = false,
-    skipSettingsTransition: Boolean = false,
     sessionStartedAt: Long = 0L,
     topChromeScrollOffset: MutableFloatState = mutableFloatStateOf(0f),
+    isWideLayout: Boolean = false,
 ) {
     val horizontalDirection = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1 else -1
     val density = LocalDensity.current
@@ -1540,16 +984,12 @@ private fun TabContent(
         AnimatedContent(
             targetState = currentTab,
         transitionSpec = {
-            if (skipTabTransition) {
-                fadeIn(animationSpec = tween(0)) togetherWith fadeOut(animationSpec = tween(0))
-            } else {
-                directionalTabTransition(
-                    isForward = targetState.ordinal > initialState.ordinal,
-                    layoutDirection = horizontalDirection,
-                    reduceMotion = reduceMotion,
-                    density = density,
-                )
-            }
+            directionalTabTransition(
+                isForward = targetState.ordinal > initialState.ordinal,
+                layoutDirection = horizontalDirection,
+                reduceMotion = reduceMotion,
+                density = density,
+            )
         },
         label = "TabTransition"
     ) { tab ->
@@ -1566,6 +1006,7 @@ private fun TabContent(
                     uiState = discoverState,
                     isLoggedIn = uiState.isLoggedIn,
                     downloadProgress = downloadProgress,
+                    onBack = discoverViewModel::goBack,
                     onToggleSelect = discoverViewModel::toggleSongSelection,
                     onSelectAll = discoverViewModel::toggleSelectAll,
                     onDownload = discoverViewModel::downloadSelected,
@@ -1596,6 +1037,25 @@ private fun TabContent(
                 SearchTab(
                     state = searchState,
                     downloadProgress = downloadProgress,
+                    onBack = searchViewModel::goBack,
+                    navStack = searchNavStack,
+                    artistDetailContent = {
+                        val artistState by discoverViewModel.uiState.collectAsStateWithLifecycle()
+                        ArtistDetailPage(
+                            state = artistState,
+                            songs = artistState.artistDetailSongs,
+                            downloadProgress = downloadProgress,
+                            onToggleSelect = discoverViewModel::toggleSongSelection,
+                            onSelectAll = discoverViewModel::toggleSelectAll,
+                            onDownload = discoverViewModel::downloadSelected,
+                            onAlbumClick = discoverViewModel::loadAlbumFromResult,
+                            onArtistClick = { a -> discoverViewModel.loadArtistDetail(a) },
+                            onSetSection = discoverViewModel::setArtistDetailSection,
+                            onLoadMore = discoverViewModel::loadMoreArtistSection,
+                            onRetry = { discoverViewModel.refreshCurrentSource() },
+                            innerPadding = stablePagePadding(innerPadding, contextPage = true),
+                        )
+                    },
                     onSearchQueryChange = searchViewModel::updateSearchQuery,
                     onSearch = searchViewModel::search,
                     onParseUrl = { searchViewModel.updatePlaylistUrl(it); searchViewModel.parseUrl() },
@@ -1605,8 +1065,9 @@ private fun TabContent(
                     onLoadMore = searchViewModel::loadMoreSearch,
                     onAlbumClick = searchViewModel::loadAlbumFromResult,
                     onArtistClick = { artist ->
+                        // 歌手详情留在搜索 Tab 内，返回时回到搜索结果
                         discoverViewModel.loadArtistDetail(artist, SourceMode.SEARCH)
-                        onSwitchToDiscover()
+                        searchViewModel.openArtistDetail()
                     },
                     onPlaylistClick = searchViewModel::loadPlaylistFromResult,
                     onPodcastClick = searchViewModel::loadPodcastFromResult,
@@ -1646,7 +1107,6 @@ private fun TabContent(
                     state = myUiState,
                     onOpenSection = myViewModel::openSection,
                     onBack = onMyBack,
-                    onClearDetail = onMyBack,
                     onComingSoon = myViewModel::showComingSoon,
                     onPlaylistClick = myViewModel::loadPlaylistSongs,
                     onToggleSong = myViewModel::toggleSongSelection,
@@ -1667,191 +1127,42 @@ private fun TabContent(
                 )
             }
             Tab.SETTINGS -> {
-                val settingsSubPage = when {
-                    showQualityUpgrade -> 6
-                    showPreviewFeatures -> 5
-                    showAboutSettings -> 4
-                    showAccountSettings -> 3
-                    showAppearanceSettings -> 1
-                    showDownloadSettings -> 2
-                    else -> 0
-                }
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(colorScheme.surface)
-                ) {
-                    // 统一的 AnimatedContent，包含一级和二级页面
-                    val suppressNav = LocalSuppressNavTransition.current
-                    AnimatedContent(
-                        targetState = settingsSubPage,
-                        modifier = Modifier.fillMaxSize(),
-                        transitionSpec = {
-                            hierarchicalNavigationTransition(
-                                isForward = targetState > initialState,
-                                layoutDirection = horizontalDirection,
-                                suppress = suppressNav,
-                            )
-                        },
-                        label = "SettingsSubPage"
-                    ) { page ->
-                        when (page) {
-                            0 -> SettingsTab(
-                                uiState = uiState,
-                                viewModel = viewModel,
-                                onLogout = onLogout,
-                                onPickDownloadDir = onPickDownloadDir,
-                                onToggleFuckAiMode = viewModel::toggleFuckAiMode,
-                                onQualitySelect = viewModel::updateQuality,
-                                onSetNamingFormat = viewModel::setNamingFormat,
-                                onToggleDownloadLyrics = viewModel::toggleDownloadLyrics,
-                                onSetFolderNamingFormat = viewModel::setFolderNamingFormat,
-                                onToggleEnableWriteTags = viewModel::toggleEnableWriteTags,
-                                onOpenAppearanceSettings = onOpenAppearanceSettings,
-                                onOpenDownloadSettings = onOpenDownloadSettings,
-                                onOpenAccountSettings = onOpenAccountSettings,
-                                onOpenPreviewFeatures = onOpenPreviewFeatures,
-                                onOpenAboutSettings = onOpenAboutSettings,
-                                onThemeBaseModeChanged = viewModel::updateThemeBaseMode,
-                                onToggleMonetTheme = viewModel::toggleMonetTheme,
-                                onShareLog = {
-                                    val logFile = File(AppLogger.getLogFilePath())
-                                    val uri = if (logFile.exists()) ShareableFile.contentUri(context, logFile) else null
-                                    if (uri != null) {
-                                        val intent = Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/plain"
-                                            putExtra(Intent.EXTRA_STREAM, uri)
-                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                        }
-                                        context.startActivity(Intent.createChooser(intent, "导出日志"))
-                                    } else {
-                                        Toast.makeText(context, "暂无可导出的日志", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                onExportCookies = onExportCookies,
-                                onImportClick = onImportClick,
-                                onClearSeenClick = {
-                                    viewModel.clearSeenItems()
-                                    discoverViewModel.refreshCurrentSource()
-                                },
-                                onClearCache = {
-                                    viewModel.clearCache(context)
-                                },
-                                innerPadding = innerPadding,
-                                scrollToTopTrigger = scrollToTopTrigger,
-                            )
-                            1 -> Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .background(colorScheme.surface)
-                            ) {
-                                AppearanceSettingsScreen(
-                                    uiState = uiState,
-                                    onThemeBaseModeChanged = viewModel::updateThemeBaseMode,
-                                    onToggleMonetTheme = viewModel::toggleMonetTheme,
-                                    onToggleBlurEffect = onToggleBlurEffect,
-                                    onToggleLiquidGlass = onToggleLiquidGlass,
-                                    onBack = onCloseAppearanceSettings,
-                                    innerPadding = innerPadding
-                                )
-                            }
-                            2 -> Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .background(colorScheme.surface)
-                            ) {
-                                 DownloadSettingsScreen(
-                                     uiState = uiState,
-                                     onPickDownloadDir = onPickDownloadDir,
-                                     onOpenStoragePermissionSettings = onOpenStoragePermissionSettings,
-                                    onToggleFuckAiMode = viewModel::toggleFuckAiMode,
-                                    onQualitySelect = viewModel::updateQuality,
-                                    onSetNamingFormat = viewModel::setNamingFormat,
-                                    onToggleDownloadLyrics = viewModel::toggleDownloadLyrics,
-                                    onSetFolderNamingFormat = viewModel::setFolderNamingFormat,
-                                    onToggleEnableWriteTags = viewModel::toggleEnableWriteTags,
-                                    onToggleSaveTlLrc = viewModel::toggleSaveTlLrc,
-                                    onToggleSaveRomaLrc = viewModel::toggleSaveRomaLrc,
-                                    onToggleSaveYrc = viewModel::toggleSaveYrc,
-                                    onSetCustomNamingTemplate = viewModel::setCustomNamingTemplate,
-                                    onSetArtistDelimiter = viewModel::setArtistDelimiter,
-                                    onBack = onCloseDownloadSettings,
-                                    innerPadding = innerPadding
-                                )
-                            }
-                            3 -> Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .background(colorScheme.surface)
-                            ) {
-                                AccountSettingsScreen(
-                                    uiState = uiState,
-                                    onBrowserLoginClick = onBrowserLoginClick,
-                                    onCookieLoginClick = onCookieLoginClick,
-                                    onMusicULoginClick = onMusicULoginClick,
-                                    onLogout = onLogout,
-                                    onExportCookies = onExportCookies,
-                                    onImportClick = onImportClick,
-                                    onBack = onCloseAccountSettings,
-                                    innerPadding = innerPadding
-                                )
-                            }
-                            4 -> Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .background(colorScheme.surface)
-                            ) {
-                                AboutSettingsScreen(
-                                    uiState = uiState,
-                                    viewModel = viewModel,
-                                    onShareLog = {
-                                        val logFile = File(AppLogger.getLogFilePath())
-                                        val uri = if (logFile.exists()) ShareableFile.contentUri(context, logFile) else null
-                                        if (uri != null) {
-                                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                                type = "text/plain"
-                                                putExtra(Intent.EXTRA_STREAM, uri)
-                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                            }
-                                            context.startActivity(Intent.createChooser(intent, "导出日志"))
-                                        } else {
-                                            Toast.makeText(context, "暂无可导出的日志", Toast.LENGTH_SHORT).show()
-                                        }
-                                    },
-                                    onBack = onCloseAboutSettings,
-                                    innerPadding = innerPadding,
-                                )
-                            }
-                            5 -> Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .background(colorScheme.surface)
-                            ) {
-                                val upgradeState by upgradeViewModel.uiState.collectAsStateWithLifecycle()
-                                UpgradeTab(
-                                    uiState = upgradeState,
-                                    onAddFolder = onPickMusicFolder,
-                                    onRemoveFolder = upgradeViewModel::removeFolder,
-                                    onStartScan = upgradeViewModel::startScan,
-                                    onSelectUpgradeMode = upgradeViewModel::selectUpgradeMode,
-                                    onToggleSongSelection = upgradeViewModel::toggleSongSelection,
-                                    onSelectAll = upgradeViewModel::selectAllSongs,
-                                    onDeselectAll = upgradeViewModel::deselectAllSongs,
-                                    onCheckUpgrades = upgradeViewModel::checkForUpgrades,
-                                    onStartUpgrade = upgradeViewModel::startUpgrade,
-                                    onCancelUpgrade = upgradeViewModel::cancelUpgrade,
-                                    onToggleFolderExpand = upgradeViewModel::toggleFolderExpand,
-                                    onExpandAllFolders = upgradeViewModel::expandAllFolders,
-                                    onCollapseAllFolders = upgradeViewModel::collapseAllFolders,
-                                    onSelectFolderSongs = upgradeViewModel::selectFolderSongs,
-                                    onDeselectFolderSongs = upgradeViewModel::deselectFolderSongs,
-                                    innerPadding = innerPadding,
-                                    scrollToTopTrigger = scrollToTopTrigger,
-                                )
-                            }
-                        }
-                    }
-                }
+                SettingsNavHost(
+                    navBackStack = navBackStack,
+                    onPopSettingsPage = onPopSettingsPage,
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    upgradeViewModel = upgradeViewModel,
+                    discoverViewModel = discoverViewModel,
+                    context = context,
+                    innerPadding = innerPadding,
+                    scrollToTopTrigger = scrollToTopTrigger,
+                    isWide = isWideLayout,
+                    onLogout = onLogout,
+                    onPickDownloadDir = onPickDownloadDir,
+                    onPickMusicFolder = onPickMusicFolder,
+                    onOpenAppearanceSettings = onOpenAppearanceSettings,
+                    onOpenDownloadSettings = onOpenDownloadSettings,
+                    onOpenFileTagSettings = onOpenFileTagSettings,
+                    onOpenAccountSettings = onOpenAccountSettings,
+                    onOpenPreviewFeatures = onOpenPreviewFeatures,
+                    onOpenQualityUpgrade = onOpenQualityUpgrade,
+                    onClosePreviewFeatures = onClosePreviewFeatures,
+                    onOpenAboutSettings = onOpenAboutSettings,
+                    onCloseAppearanceSettings = onCloseAppearanceSettings,
+                    onCloseDownloadSettings = onCloseDownloadSettings,
+                    onCloseFileTagSettings = onCloseFileTagSettings,
+                    onCloseAccountSettings = onCloseAccountSettings,
+                    onCloseAboutSettings = onCloseAboutSettings,
+                    onToggleBlurEffect = onToggleBlurEffect,
+                    onToggleLiquidGlass = onToggleLiquidGlass,
+                    onExportCookies = onExportCookies,
+                    onImportClick = onImportClick,
+                    onOpenStoragePermissionSettings = onOpenStoragePermissionSettings,
+                    onBrowserLoginClick = onBrowserLoginClick,
+                    onCookieLoginClick = onCookieLoginClick,
+                    onMusicULoginClick = onMusicULoginClick,
+                )
             }
             }
         }
@@ -1859,141 +1170,6 @@ private fun TabContent(
     }
 }
 
-/**
- * 预测性返回手势期间渲染的目标页面背景预览。
- *
- * 在返回手势进行中，前景页面滑出的同时，该 composable 在下方渲染目标页面，
- * 让用户在松手前就能看到即将返回到的界面，实现 SukiSU / Melox 风格的预测性返回效果。
- *
- * 回调参数全部传空 lambda——背景预览只用于视觉展示，不处理交互事件。
- */
-@Composable
-private fun ContextBackPreview(
-    target: ContextBackTarget,
-    uiState: MainUiState,
-    viewModel: MainViewModel,
-    searchViewModel: SearchViewModel,
-    discoverViewModel: DiscoverViewModel,
-    myViewModel: MyViewModel,
-    currentTab: Tab,
-    innerPadding: PaddingValues,
-) {
-    when (target) {
-        ContextBackTarget.APPEARANCE_SETTINGS,
-        ContextBackTarget.DOWNLOAD_SETTINGS,
-        ContextBackTarget.ACCOUNT_SETTINGS,
-        ContextBackTarget.PREVIEW_FEATURES,
-        ContextBackTarget.ABOUT_SETTINGS -> {
-            SettingsTab(
-                uiState = uiState,
-                viewModel = viewModel,
-                onLogout = {},
-                innerPadding = innerPadding,
-            )
-        }
-        ContextBackTarget.QUALITY_UPGRADE -> {
-            PreviewFeaturesScreen(
-                onOpenQualityUpgrade = {},
-                onBack = {},
-                innerPadding = innerPadding,
-            )
-        }
-        ContextBackTarget.SEARCH_DETAIL -> {
-            val searchState by searchViewModel.uiState.collectAsStateWithLifecycle()
-            val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
-            SearchTab(
-                state = searchState.copy(isDetailView = false),
-                downloadProgress = downloadProgress,
-                onSearchQueryChange = {},
-                onSearch = {},
-                onToggleSelect = {},
-                onSelectAll = {},
-                onSetSearchCategory = {},
-                onLoadMore = {},
-                onAlbumClick = {},
-                onArtistClick = {},
-                onPlaylistClick = {},
-                onPodcastClick = {},
-                innerPadding = innerPadding,
-            )
-        }
-        ContextBackTarget.DISCOVER -> {
-            val discoverState by discoverViewModel.uiState.collectAsStateWithLifecycle()
-            val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
-            // Show the actual parent page: detail → preSongSourceMode, sub-category → RECOMMEND
-            val parentSourceMode = if (discoverState.isDetailView) discoverState.preSongSourceMode else SourceMode.RECOMMEND
-            DiscoverTab(
-                uiState = discoverState.copy(
-                    songs = emptyList(),
-                    sourceLabel = "",
-                    collectionDetail = null,
-                    activeArtist = null,
-                    activePodcast = null,
-                    isLoading = false,
-                    sourceMode = parentSourceMode,
-                ),
-                isLoggedIn = uiState.isLoggedIn,
-                downloadProgress = downloadProgress,
-                onToggleSelect = {},
-                onSelectAll = {},
-                onSetSourceMode = {},
-                innerPadding = innerPadding,
-            )
-        }
-        ContextBackTarget.MY_SECTION -> {
-            val myUiState by myViewModel.uiState.collectAsStateWithLifecycle()
-            // 详情页 → 上一级是 section 列表；section 列表 → 上一级是 HOME
-            val previewState = if (myUiState.isPlaylistDetail) {
-                myUiState.copy(songs = emptyList())
-            } else {
-                myUiState.copy(section = MySection.HOME, songs = emptyList())
-            }
-            MyTab(
-                state = previewState,
-                onOpenSection = {},
-                onBack = {},
-                onClearDetail = {},
-                onComingSoon = {},
-                onPlaylistClick = {},
-                onToggleSong = {},
-                onSelectAll = {},
-                onDownload = {},
-                onLoadMoreCloud = {},
-                onCloudSearchQueryChange = {},
-                onRefresh = {},
-                onSetRankType = {},
-                onSetFootprintTab = {},
-                onLoadMoreAlbums = {},
-                onLoadMoreArtists = {},
-                onAlbumClick = {},
-                onArtistClick = {},
-                innerPadding = innerPadding,
-                isLoggedIn = uiState.isLoggedIn,
-            )
-        }
-        ContextBackTarget.LEGACY_SEARCH -> {
-            val discoverState by discoverViewModel.uiState.collectAsStateWithLifecycle()
-            val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
-            DiscoverTab(
-                uiState = discoverState.copy(
-                    songs = emptyList(),
-                    sourceLabel = "",
-                    collectionDetail = null,
-                    activeArtist = null,
-                    activePodcast = null,
-                    isLoading = false,
-                    sourceMode = SourceMode.RECOMMEND,
-                ),
-                isLoggedIn = uiState.isLoggedIn,
-                downloadProgress = downloadProgress,
-                onToggleSelect = {},
-                onSelectAll = {},
-                onSetSourceMode = {},
-                innerPadding = innerPadding,
-            )
-        }
-    }
-}
 
 @Composable
 private fun LoginPrompt(

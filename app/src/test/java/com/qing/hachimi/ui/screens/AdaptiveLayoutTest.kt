@@ -68,4 +68,16 @@ class AdaptiveLayoutTest {
         // 宽屏端列数由可用宽度决定，非法输入不生效
         assertEquals(3, adaptiveGridColumns(0, 900.dp, isWide = true))
     }
+
+    @Test
+    fun `list style content uses two columns only on very wide screens`() {
+        // 手机横屏（600~839dp）与平板竖屏（840~1199dp）都保持单列，列表条目不会被挤压
+        assertFalse(useTwoColumnListLayout(600.dp))
+        assertFalse(useTwoColumnListLayout(839.dp))
+        assertFalse(useTwoColumnListLayout(840.dp))
+        assertFalse(useTwoColumnListLayout(1199.dp))
+        // 平板横屏起才分两列
+        assertTrue(useTwoColumnListLayout(1200.dp))
+        assertTrue(useTwoColumnListLayout(1600.dp))
+    }
 }

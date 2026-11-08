@@ -19,6 +19,11 @@ class FloatingNavigationLayoutTest {
     }
 
     @Test
+    fun `docked bar clears system navigation and bar height`() {
+        assertEquals(96.dp, dockedContentBottomPadding(24.dp))
+    }
+
+    @Test
     fun `backdrop is captured when blur or liquid glass is on`() {
         assertTrue(shouldCaptureFloatingBackdrop(blurEnabled = true, liquidGlassEnabled = false))
         assertTrue(shouldCaptureFloatingBackdrop(blurEnabled = false, liquidGlassEnabled = true))

@@ -1,0 +1,97 @@
+name: Build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # versionCode 取自 git commit 数量，需要完整历史
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # 包装器地址指向阿里云镜像，缓存在 CI 上能显著减少重复下载
+          cache-read-only: false
+
+      # ubuntu-latest 镜像已预装 android-37.0 与 build-tools 36.0.0
+
+      # 签名配置：keystore 不进仓库，CI 从 Secrets 还原。
+      # 未配置 Secret 时，这一步静默跳过，后面构建出 unsigned 包而不是失败。
+      - name: Restore signing material
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          CERT_SHA256: ${{ secrets.CERT_SHA256 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "未配置签名 Secrets，本次构建产出 unsigned 包"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > app/release.keystore
+          {
+            echo "HACHIMI_STORE_PASSWORD=$STORE_PASSWORD"
+            echo "HACHIMI_KEY_PASSWORD=$KEY_PASSWORD"
+            echo "HACHIMI_KEY_ALIAS=${KEY_ALIAS:-hachimi}"
+            echo "HACHIMI_CERT_SHA256=$CERT_SHA256"
+          } >> gradle.properties
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug
+
+      - name: Build release APK
+        run: ./gradlew :app:assembleRelease
+
+      - name: Verify signature
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk 2>/dev/null | grep -v unsigned || true)
+          if [ -n "$APK" ]; then
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK"
+          else
+            echo "unsigned 构建，跳过验签"
+          fi
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: hachimi-apks
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
+          retention-days: 14
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/*.apk
+          generate_release_notes: true

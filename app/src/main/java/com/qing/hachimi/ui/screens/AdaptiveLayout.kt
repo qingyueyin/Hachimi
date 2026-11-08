@@ -70,10 +70,25 @@ internal fun rememberIsNavigationRailScreen(): Boolean {
 }
 
 /**
- * 宽屏下把内容限宽到 [WideScreenContentMaxWidth] 并水平居中；手机端原样透传。
+ * 列表型内容（歌曲行、歌单行这类整行卡片）分两列的宽度门槛。
+ * 低于该宽度时单行被压窄，标题和操作按钮会挤成一团。
+ */
+internal val TwoColumnListMinWidth = 1200.dp
+
+/**
+ * 列表型内容是否分两列：只有平板横屏（≥1200dp）才分列，手机横屏和竖放平板保持单列。
+ */
+internal fun useTwoColumnListLayout(contentWidth: Dp): Boolean =
+    contentWidth >= TwoColumnListMinWidth
+
+/**
+ * 宽屏下把内容限宽到 [maxWidth] 并水平居中；手机端原样透传。
  */
 @Composable
-internal fun WidthLimiter(content: @Composable () -> Unit) {
+internal fun WidthLimiter(
+    maxWidth: Dp = WideScreenContentMaxWidth,
+    content: @Composable () -> Unit,
+) {
     if (rememberIsWideScreen()) {
         Box(
             modifier = Modifier.fillMaxWidth(),
@@ -82,7 +97,7 @@ internal fun WidthLimiter(content: @Composable () -> Unit) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(max = WideScreenContentMaxWidth)
+                    .widthIn(max = maxWidth)
             ) {
                 content()
             }

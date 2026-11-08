@@ -21,6 +21,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -32,25 +36,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.qing.hachimi.data.api.NeteaseApi
-import com.qing.hachimi.data.local.FolderNamingFormat
-import com.qing.hachimi.data.local.NamingFormat
 import com.qing.hachimi.ui.theme.ColorMode
 import com.qing.hachimi.util.OfficialBuild
-import com.qing.hachimi.util.StoragePermissionManager
-import com.qing.hachimi.util.storageAccessSummary
-import java.io.File
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -67,7 +61,6 @@ import top.yukonga.miuix.kmp.icon.extended.ContactsCircle
 import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.FileDownloads
 import top.yukonga.miuix.kmp.icon.extended.Folder
-import top.yukonga.miuix.kmp.icon.extended.FolderFill
 import top.yukonga.miuix.kmp.icon.extended.Image
 import top.yukonga.miuix.kmp.icon.extended.Info
 import top.yukonga.miuix.kmp.icon.extended.Link
@@ -87,51 +80,91 @@ import com.qing.hachimi.util.UpdateInfo
 @Composable
 fun SettingsTab(
     uiState: MainUiState,
-    viewModel: MainViewModel,
-    onLogout: () -> Unit,
-    onPickDownloadDir: () -> Unit = {},
-    onToggleFuckAiMode: () -> Unit = {},
-    onQualitySelect: (String) -> Unit = {},
-    onSetNamingFormat: (NamingFormat) -> Unit = {},
-    onToggleDownloadLyrics: () -> Unit = {},
-    onSetFolderNamingFormat: (FolderNamingFormat) -> Unit = {},
-    onToggleEnableWriteTags: () -> Unit = {},
     onOpenAppearanceSettings: () -> Unit = {},
     onOpenDownloadSettings: () -> Unit = {},
+    onOpenFileTagSettings: () -> Unit = {},
     onOpenAccountSettings: () -> Unit = {},
     onOpenPreviewFeatures: () -> Unit = {},
     onOpenAboutSettings: () -> Unit = {},
-    onThemeBaseModeChanged: (Int) -> Unit = {},
-    onToggleMonetTheme: () -> Unit = {},
-    onShareLog: () -> Unit = {},
-    onExportCookies: () -> Unit = {},
-    onImportClick: () -> Unit = {},
-    onClearSeenClick: () -> Unit = {},
+    onResetDiscoverClick: () -> Unit = {},
     onClearCache: () -> Unit = {},
+    isWide: Boolean = false,
     innerPadding: PaddingValues = PaddingValues(0.dp),
     scrollToTopTrigger: Int = 0,
 ) {
-    val listState = rememberLazyListState()
-    val context = LocalContext.current
+    val gridState = rememberLazyGridState()
     LaunchedEffect(scrollToTopTrigger) {
         if (scrollToTopTrigger > 0) {
-            listState.animateScrollToItem(0)
+            gridState.animateScrollToItem(0)
         }
     }
     Box(modifier = Modifier.fillMaxSize()) {
-    LazyColumn(
-        state = listState,
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(if (isWide) 2 else 1),
+        state = gridState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = innerPadding,
     ) {
         // ═════════════════════════════════════════════════════════════
         // 页面大标题
         // ═════════════════════════════════════════════════════════════
-        item {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             ScreenHeading(
                 title = "设置",
                 modifier = Modifier.padding(horizontal = 12.dp),
             )
+        }
+
+        // ═════════════════════════════════════════════════════════════
+        // 下载设置 - 跳转到二级页面
+        // ═════════════════════════════════════════════════════════════
+        item {
+            Card(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .padding(top = 12.dp)
+                    .fillMaxWidth()
+            ) {
+                ArrowPreference(
+                    title = "下载",
+                    summary = "音质、目录、歌词等下载设置",
+                    startAction = {
+                        Icon(
+                            MiuixIcons.Folder,
+                            modifier = Modifier.padding(end = 6.dp),
+                            contentDescription = "下载",
+                            tint = colorScheme.onBackground
+                        )
+                    },
+                    onClick = onOpenDownloadSettings
+                )
+            }
+        }
+
+        // ═════════════════════════════════════════════════════════════
+        // 文件与标签 - 跳转到二级页面
+        // ═════════════════════════════════════════════════════════════
+        item {
+            Card(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .padding(top = 12.dp)
+                    .fillMaxWidth()
+            ) {
+                ArrowPreference(
+                    title = "文件与标签",
+                    summary = "命名格式、文件夹规则、音频标签",
+                    startAction = {
+                        Icon(
+                            MiuixIcons.Notes,
+                            modifier = Modifier.padding(end = 6.dp),
+                            contentDescription = "文件与标签",
+                            tint = colorScheme.onBackground
+                        )
+                    },
+                    onClick = onOpenFileTagSettings
+                )
+            }
         }
 
         // ═════════════════════════════════════════════════════════════
@@ -161,7 +194,7 @@ fun SettingsTab(
         }
 
         uiState.statusMessage?.let { message ->
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 val isError = message.contains("失败") ||
                     message.contains("错误") ||
                     message.contains("超时")
@@ -170,32 +203,6 @@ fun SettingsTab(
                     color = if (isError) colorScheme.error else colorScheme.primary,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     style = MiuixTheme.textStyles.body2,
-                )
-            }
-        }
-
-        // ═════════════════════════════════════════════════════════════
-        // 下载设置 - 跳转到二级页面
-        // ═════════════════════════════════════════════════════════════
-        item {
-            Card(
-                modifier = Modifier
-                    .padding(horizontal = 12.dp)
-                    .padding(top = 12.dp)
-                    .fillMaxWidth()
-            ) {
-                ArrowPreference(
-                    title = "下载",
-                    summary = "音质、目录、命名、歌词等下载设置",
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Folder,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "下载",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    onClick = onOpenDownloadSettings
                 )
             }
         }
@@ -278,7 +285,7 @@ fun SettingsTab(
         // ═════════════════════════════════════════════════════════════
         // 维护工具
         // ═════════════════════════════════════════════════════════════
-        item {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             Card(
                 modifier = Modifier
                     .padding(horizontal = 12.dp)
@@ -296,7 +303,7 @@ fun SettingsTab(
                             tint = colorScheme.onBackground
                         )
                     },
-                    onClick = onClearSeenClick
+                    onClick = onResetDiscoverClick
                 )
 
                 ArrowPreference(
@@ -315,377 +322,12 @@ fun SettingsTab(
             }
         }
 
-        item {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             Spacer(modifier = Modifier.height(LocalMainBottomContentPadding.current))
         }
     }
     VerticalScrollBar(
-        adapter = rememberScrollBarAdapter(listState),
-        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-    )
-    }
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// 下载设置二级页面
-// ═════════════════════════════════════════════════════════════════════════════
-
-@OptIn(ExperimentalScrollBarApi::class)
-@Composable
-fun DownloadSettingsScreen(
-    uiState: MainUiState,
-    onPickDownloadDir: () -> Unit,
-    onOpenStoragePermissionSettings: () -> Unit = {},
-    onToggleFuckAiMode: () -> Unit,
-    onQualitySelect: (String) -> Unit,
-    onSetNamingFormat: (NamingFormat) -> Unit,
-    onToggleDownloadLyrics: () -> Unit,
-    onSetFolderNamingFormat: (FolderNamingFormat) -> Unit,
-    onToggleEnableWriteTags: () -> Unit,
-    onToggleSaveTlLrc: () -> Unit = {},
-    onToggleSaveRomaLrc: () -> Unit = {},
-    onToggleSaveYrc: () -> Unit = {},
-    onSetCustomNamingTemplate: (String) -> Unit = {},
-    onSetArtistDelimiter: (String) -> Unit = {},
-    onBack: () -> Unit,
-    innerPadding: PaddingValues = PaddingValues(0.dp)
-) {
-    val listState = rememberLazyListState()
-    Box(modifier = Modifier.fillMaxSize()) {
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = innerPadding
-    ) {
-        item { SecondaryPageHeader("下载设置", onBack) }
-        item {
-            Card(
-                modifier = Modifier
-                    .padding(horizontal = 12.dp)
-                    .padding(top = 12.dp)
-                    .fillMaxWidth()
-            ) {
-                val qualityOptions = uiState.qualityPickerOptions.map { key ->
-                    NeteaseApi.QUALITY_MAP[key] ?: key
-                }
-                OverlayDropdownPreference(
-                    title = "默认音质",
-                    summary = "选择下载音质",
-                    items = qualityOptions,
-                    selectedIndex = uiState.qualityPickerOptions.indexOf(uiState.quality).coerceAtLeast(0),
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Music,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "默认音质",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    onSelectedIndexChange = { index ->
-                        onQualitySelect(uiState.qualityPickerOptions[index])
-                    }
-                )
-
-                ArrowPreference(
-                    title = "下载目录",
-                    summary = if (uiState.downloadDir.isNotBlank())
-                        uiState.downloadDir
-                    else "Hachimi",
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Folder,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "下载目录",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    onClick = onPickDownloadDir
-                )
-
-                var storageSummary by remember { mutableStateOf("") }
-                fun refreshStorageStatus() {
-                    val granted = StoragePermissionManager.hasAllFilesAccess()
-                    val dir = uiState.downloadDir.takeIf { it.isNotBlank() }?.let(::File)
-                    val writable = dir?.let { StoragePermissionManager.probeCanWrite(it) } ?: granted
-                    storageSummary = storageAccessSummary(granted, writable)
-                }
-                val lifecycleOwner = LocalLifecycleOwner.current
-                DisposableEffect(lifecycleOwner, uiState.downloadDir) {
-                    refreshStorageStatus()
-                    val observer = LifecycleEventObserver { _, event ->
-                        if (event == Lifecycle.Event.ON_RESUME) refreshStorageStatus()
-                    }
-                    lifecycleOwner.lifecycle.addObserver(observer)
-                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-                }
-                ArrowPreference(
-                    title = "存储权限",
-                    summary = storageSummary.ifBlank { "点击查看授权状态" },
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Settings,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "存储权限",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    onClick = onOpenStoragePermissionSettings
-                )
-
-                SwitchPreference(
-                    title = "Fuck AI Mode",
-                    summary = "隐藏AI增强音质，保留杜比全景声",
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Settings,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "Fuck AI Mode",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    checked = uiState.fuckAiMode,
-                    onCheckedChange = { onToggleFuckAiMode() }
-                )
-
-                val namingOptions = NamingFormat.entries.map { it.label }
-                OverlayDropdownPreference(
-                    title = "文件命名",
-                    summary = "设置下载文件命名格式",
-                    items = namingOptions,
-                    selectedIndex = NamingFormat.entries.indexOf(uiState.namingFormat),
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Notes,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "文件命名",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    onSelectedIndexChange = { index ->
-                        onSetNamingFormat(NamingFormat.entries[index])
-                    }
-                )
-
-                SwitchPreference(
-                    title = "下载歌词",
-                    summary = "同时下载 .lrc 歌词文件",
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Notes,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "下载歌词",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    checked = uiState.downloadLyrics,
-                    onCheckedChange = { onToggleDownloadLyrics() }
-                )
-
-                val folderNamingOptions = FolderNamingFormat.entries.map { it.label }
-                OverlayDropdownPreference(
-                    title = "下载文件夹规则",
-                    summary = "设置下载文件夹命名规则",
-                    items = folderNamingOptions,
-                    selectedIndex = FolderNamingFormat.entries.indexOf(uiState.folderNamingFormat),
-                    startAction = {
-                        Icon(
-                            MiuixIcons.FolderFill,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "下载文件夹规则",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    onSelectedIndexChange = { index ->
-                        onSetFolderNamingFormat(FolderNamingFormat.entries[index])
-                    }
-                )
-
-                SwitchPreference(
-                    title = "写入音频标签",
-                    summary = "下载完成后写入歌曲信息与封面（默认关闭）",
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Info,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "写入音频标签",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    checked = uiState.enableWriteTags,
-                    onCheckedChange = { onToggleEnableWriteTags() }
-                )
-
-                SwitchPreference(
-                    title = "保存歌词翻译",
-                    summary = "在歌词中包含翻译（如果可用）",
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Notes,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "保存歌词翻译",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    checked = uiState.saveTlLrc,
-                    onCheckedChange = { onToggleSaveTlLrc() }
-                )
-
-                SwitchPreference(
-                    title = "保存歌词罗马音",
-                    summary = "在歌词中包含罗马音（如果可用）",
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Notes,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "保存歌词罗马音",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    checked = uiState.saveRomaLrc,
-                    onCheckedChange = { onToggleSaveRomaLrc() }
-                )
-
-                SwitchPreference(
-                    title = "保存逐字歌词",
-                    summary = "尝试保存逐字歌词（如果可用）",
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Notes,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "保存逐字歌词",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    checked = uiState.saveYrc,
-                    onCheckedChange = { onToggleSaveYrc() }
-                )
-
-                var showNamingTemplateDialog by remember { mutableStateOf(false) }
-                var namingTemplateInput by remember { mutableStateOf(uiState.customNamingTemplate) }
-
-                ArrowPreference(
-                    title = "自定义文件命名模板",
-                    summary = if (uiState.customNamingTemplate.isNotBlank()) uiState.customNamingTemplate else "使用默认命名格式",
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Notes,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "自定义命名模板",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    onClick = {
-                        namingTemplateInput = uiState.customNamingTemplate
-                        showNamingTemplateDialog = true
-                    }
-                )
-
-                if (showNamingTemplateDialog) {
-                    WindowDialog(
-                        show = true,
-                        title = "自定义命名模板",
-                        summary = "可用变量：\${name} \${artists} \${album} \${quality}\n\n留空使用默认命名格式",
-                        onDismissRequest = { showNamingTemplateDialog = false }
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                            TextField(
-                                value = namingTemplateInput,
-                                onValueChange = { namingTemplateInput = it },
-                                label = "命名模板",
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
-                            Spacer(Modifier.height(16.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                TextButton(
-                                    text = "取消",
-                                    onClick = { showNamingTemplateDialog = false }
-                                )
-                                Spacer(Modifier.width(12.dp))
-                                Button(
-                                    onClick = {
-                                        onSetCustomNamingTemplate(namingTemplateInput.trim())
-                                        showNamingTemplateDialog = false
-                                    }
-                                ) {
-                                    Text("保存")
-                                }
-                            }
-                            Spacer(Modifier.height(8.dp))
-                        }
-                    }
-                }
-
-                var showDelimiterDialog by remember { mutableStateOf(false) }
-                var delimiterInput by remember { mutableStateOf(uiState.artistDelimiter) }
-
-                ArrowPreference(
-                    title = "艺术家分隔符",
-                    summary = "当前：${uiState.artistDelimiter}",
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Settings,
-                            modifier = Modifier.padding(end = 6.dp),
-                            contentDescription = "艺术家分隔符",
-                            tint = colorScheme.onBackground
-                        )
-                    },
-                    onClick = {
-                        delimiterInput = uiState.artistDelimiter
-                        showDelimiterDialog = true
-                    }
-                )
-
-                if (showDelimiterDialog) {
-                    WindowDialog(
-                        show = true,
-                        title = "艺术家分隔符",
-                        summary = "多个艺术家之间的分隔符（同时影响文件名和 ID3 标签）",
-                        onDismissRequest = { showDelimiterDialog = false }
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                            TextField(
-                                value = delimiterInput,
-                                onValueChange = { delimiterInput = it },
-                                label = "分隔符",
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
-                            Spacer(Modifier.height(16.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                TextButton(
-                                    text = "取消",
-                                    onClick = { showDelimiterDialog = false }
-                                )
-                                Spacer(Modifier.width(12.dp))
-                                Button(
-                                    onClick = {
-                                        onSetArtistDelimiter(if (delimiterInput.isBlank()) "/" else delimiterInput)
-                                        showDelimiterDialog = false
-                                    }
-                                ) {
-                                    Text("保存")
-                                }
-                            }
-                            Spacer(Modifier.height(8.dp))
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(LocalMainBottomContentPadding.current))
-        }
-    }
-    VerticalScrollBar(
-        adapter = rememberScrollBarAdapter(listState),
+        adapter = rememberScrollBarAdapter(gridState),
         modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
     )
     }
@@ -715,7 +357,6 @@ fun AccountSettingsScreen(
         modifier = Modifier.fillMaxSize(),
         contentPadding = innerPadding
     ) {
-        item { SecondaryPageHeader("账户", onBack) }
         item {
             Card(
                 modifier = Modifier
@@ -844,6 +485,7 @@ fun AppearanceSettingsScreen(
     uiState: MainUiState,
     onThemeBaseModeChanged: (Int) -> Unit,
     onToggleMonetTheme: () -> Unit,
+    onToggleFloatingNavigationBar: () -> Unit = {},
     onToggleBlurEffect: () -> Unit = {},
     onToggleLiquidGlass: () -> Unit = {},
     onBack: () -> Unit,
@@ -856,7 +498,7 @@ fun AppearanceSettingsScreen(
         modifier = Modifier.fillMaxSize(),
         contentPadding = innerPadding
     ) {
-        item { SecondaryPageHeader("外观", onBack) }
+        // 主题
         item {
             Card(
                 modifier = Modifier
@@ -896,10 +538,35 @@ fun AppearanceSettingsScreen(
                     checked = ColorMode.fromValue(uiState.colorMode).isMonet,
                     onCheckedChange = { onToggleMonetTheme() }
                 )
+            }
+        }
+
+        // 导航栏
+        item {
+            Card(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .padding(top = 12.dp)
+                    .fillMaxWidth()
+            ) {
+                SwitchPreference(
+                    title = "启用悬浮栏",
+                    summary = "关闭后底栏贴底显示",
+                    startAction = {
+                        Icon(
+                            MiuixIcons.Tune,
+                            modifier = Modifier.padding(end = 6.dp),
+                            contentDescription = "启用悬浮栏",
+                            tint = colorScheme.onBackground
+                        )
+                    },
+                    checked = uiState.floatingNavigationBar,
+                    onCheckedChange = { onToggleFloatingNavigationBar() }
+                )
 
                 SwitchPreference(
                     title = "毛玻璃效果",
-                    summary = "底部导航栏和顶栏使用模糊效果",
+                    summary = "悬浮导航栏和顶栏使用模糊效果",
                     startAction = {
                         Icon(
                             MiuixIcons.Tune,
@@ -974,7 +641,6 @@ fun PreviewFeaturesScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = innerPadding,
         ) {
-            item { SecondaryPageHeader("预览功能", onBack) }
             item {
                 Card(
                     modifier = Modifier
@@ -1044,7 +710,6 @@ fun AboutSettingsScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = innerPadding,
         ) {
-            item { SecondaryPageHeader("关于", onBack) }
             item {
                 Card(
                     modifier = Modifier

@@ -1,6 +1,7 @@
 package com.qing.hachimi.ui.screens
 
 import androidx.lifecycle.ViewModel
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.viewModelScope
 import com.qing.hachimi.data.local.CookieManager
 import com.qing.hachimi.data.local.SettingsManager
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
+@Immutable
 data class SearchUiState(
     val searchQuery: String = "",
     val searchHistory: List<String> = emptyList(),
@@ -39,7 +41,6 @@ data class SearchUiState(
     val playlistName: String = "",
     val playlistUrl: String = "",
     val sourceLabel: String = "",
-    val isDetailView: Boolean = false,
     val detailHeader: SearchDetailHeader? = null,
     val detailOffset: Int = 0,
     val detailHasMore: Boolean = false,
@@ -48,7 +49,15 @@ data class SearchUiState(
     val lastAlbum: AlbumResult? = null,
     val lastPlaylist: DiscoveryPlaylist? = null,
     val lastPodcast: PodcastChannel? = null,
-)
+    val isDetailView: Boolean = false,
+    val isArtistPage: Boolean = false,
+) {
+    val canNavigateBack: Boolean get() = isDetailView || isArtistPage
+    /** 详情页数据键：不同歌单/专辑/电台之间切换时用它区分内容 */
+    val detailKey: String get() = detailHeader?.let { "${it.kind.name}:${it.id}:${it.title}" } ?: playlistName
+
+}
+
 
 typealias SearchDetailHeader = CollectionDetail
 typealias SearchDetailKind = CollectionKind
@@ -178,9 +187,21 @@ class SearchViewModel(
         _uiState.value = uiState.value.copy(searchHistory = history)
     }
 
+    /** 从搜索结果打开歌手页（留在搜索 Tab 内，不再跳到发现页） */
+    fun openArtistDetail() {
+        val s = uiState.value
+        if (s.isArtistPage) return
+        _uiState.value = s.copy(isArtistPage = true)
+    }
+
     fun goBack() {
         detailRequestId++
         val s = uiState.value
+        // 歌手页返回：退回搜索结果层，不改变数据
+        if (s.isArtistPage) {
+            _uiState.value = s.copy(isArtistPage = false)
+            return
+        }
         val hasParentSearch = s.searchResults.run {
             songs.isNotEmpty() || albums.isNotEmpty() || artists.isNotEmpty() ||
                 playlists.isNotEmpty() || podcasts.isNotEmpty()
@@ -197,6 +218,7 @@ class SearchViewModel(
                 sourceLabel = "搜索",
                 statusMessage = buildMsg(s.searchResults),
                 isDetailView = false,
+                isArtistPage = false,
                 isSearching = false,
                 isLoadingMore = false,
                 detailHeader = null,
@@ -211,6 +233,7 @@ class SearchViewModel(
                 playlistName = "",
                 sourceLabel = "搜索",
                 isDetailView = false,
+                isArtistPage = false,
                 isSearching = false,
                 isLoadingMore = false,
                 detailHeader = null,
@@ -301,6 +324,7 @@ class SearchViewModel(
             statusMessage = null,
             sourceLabel = "搜索",
             isDetailView = false,
+            isArtistPage = false,
             detailHeader = null,
             lastRequestType = SearchRequestType.SEARCH,
             suggestions = emptyList(),

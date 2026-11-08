@@ -117,3 +117,7 @@ fastlane/screenshots
 fastlane/test_output
 fastlane/README.md
 
+
+# 本机进度记录，不提交
+PROGRESS.md
+PROGRESS-archive.md

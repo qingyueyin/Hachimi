@@ -20,7 +20,7 @@ class MainContextBackTargetTest {
     fun `search detail returns to results before its legacy source`() {
         assertEquals(
             ContextBackTarget.SEARCH_DETAIL,
-            resolve(showSearchSubBack = true, showSearchBack = true),
+            resolve(showSearchSubBack = true),
         )
     }
 
@@ -35,11 +35,19 @@ class MainContextBackTargetTest {
     }
 
     @Test
-    fun `settings subpage uses inline header instead of contextual top bar`() {
+    fun `settings subpage uses the shared top bar`() {
         val target = resolve(showDownloadSettings = true)
 
         assertEquals(ContextBackTarget.DOWNLOAD_SETTINGS, target)
-        assertFalse(target!!.usesContextHeader)
+        assertTrue(target!!.usesContextHeader)
+    }
+
+    @Test
+    fun `file and tag settings page uses the shared top bar`() {
+        val target = resolve(showFileTagSettings = true)
+
+        assertEquals(ContextBackTarget.FILE_TAG_SETTINGS, target)
+        assertTrue(target!!.usesContextHeader)
     }
 
     @Test
@@ -123,16 +131,16 @@ class MainContextBackTargetTest {
     private fun resolve(
         showAppearanceSettings: Boolean = false,
         showDownloadSettings: Boolean = false,
+        showFileTagSettings: Boolean = false,
         showAccountSettings: Boolean = false,
-        showSearchBack: Boolean = false,
         showDiscoverBack: Boolean = false,
         showMyPlaylistBack: Boolean = false,
         showSearchSubBack: Boolean = false,
     ): ContextBackTarget? = resolveContextBackTarget(
         showAppearanceSettings = showAppearanceSettings,
         showDownloadSettings = showDownloadSettings,
+        showFileTagSettings = showFileTagSettings,
         showAccountSettings = showAccountSettings,
-        showSearchBack = showSearchBack,
         showDiscoverBack = showDiscoverBack,
         showMyPlaylistBack = showMyPlaylistBack,
         showSearchSubBack = showSearchSubBack,

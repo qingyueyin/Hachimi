@@ -3,6 +3,7 @@ package com.qing.hachimi.data.local
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Environment
+import androidx.core.content.edit
 import java.io.File
 
 enum class NamingFormat(val label: String) {
@@ -185,6 +186,10 @@ class SettingsManager(context: Context) {
     var liquidGlass: Boolean
         get() = prefs.getBoolean("liquid_glass", false)
         set(value) = prefs.edit().putBoolean("liquid_glass", value).apply()
+
+    var floatingNavigationBar: Boolean
+        get() = prefs.getBoolean("floating_navigation_bar", true)
+        set(value) = prefs.edit { putBoolean("floating_navigation_bar", value) }
 
     var navigationRailExpanded: Boolean
         get() = prefs.getBoolean("navigation_rail_expanded", false)

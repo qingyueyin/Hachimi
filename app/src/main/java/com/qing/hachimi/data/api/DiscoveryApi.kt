@@ -45,10 +45,12 @@ class DiscoveryApi(private val api: NeteaseApi) {
         path: String,
         payload: JSONObject,
         cookies: Map<String, String>,
+        requireCode: Boolean = true,
     ): JSONObject {
         val raw = api.weapiPost(path, payload.toString(), cookies, REQUEST_TIMEOUT_MS)
         val response = JSONObject(raw)
-        if (response.optLong("code") != 200L) {
+        // 部分接口（如搜索联想）的响应里没有 code 字段，不能按 200 校验，否则会被误判成失败
+        if (requireCode && response.optLong("code") != 200L) {
             val message = response.optString("message").ifBlank {
                 response.optString("msg").ifBlank { "网易云接口返回异常" }
             }
@@ -277,8 +279,9 @@ class DiscoveryApi(private val api: NeteaseApi) {
                 id = item.optLong("id"),
                 name = item.optString("name"),
                 coverUrl = item.optString("coverImgUrl") ?: "",
-                description = item.optString("description") ?: "",
-                updateFrequency = item.optString("updateFrequency") ?: "",
+                // optString 遇到 JSON null 会返回字面量 "null"
+                description = item.optString("description").takeUnless { it == "null" }.orEmpty(),
+                updateFrequency = item.optString("updateFrequency").takeUnless { it == "null" }.orEmpty(),
                 trackCount = item.optInt("trackCount"),
                 playCount = item.optLong("playCount"),
                 updateTime = item.optLong("updateTime"),
@@ -303,8 +306,8 @@ class DiscoveryApi(private val api: NeteaseApi) {
             songs = songs,
             chartName = playlist.optString("name"),
             coverUrl = playlist.optString("coverImgUrl"),
-            description = playlist.optString("description"),
-            updateFrequency = playlist.optString("updateFrequency"),
+            description = playlist.optString("description").takeUnless { it == "null" }.orEmpty(),
+            updateFrequency = playlist.optString("updateFrequency").takeUnless { it == "null" }.orEmpty(),
             trackCount = playlist.optInt("trackCount", songs.size),
             playCount = playlist.optLong("playCount"),
             updateTime = playlist.optLong("updateTime"),
@@ -366,7 +369,8 @@ class DiscoveryApi(private val api: NeteaseApi) {
         if (detail.isNotEmpty()) return detail
 
         return try {
-            val raw = api.get("https://music.163.com/api/search/hot", cookies, REQUEST_TIMEOUT_MS)
+            // 这个接口必须带 type=1111，否则返回 code=400（消息"参数错误"）
+            val raw = api.get("https://music.163.com/api/search/hot?type=1111", cookies, REQUEST_TIMEOUT_MS)
             val obj = JSONObject(raw)
             if (obj.optLong("code") != 200L) return emptyList()
             val data = obj.optJSONObject("result") ?: return emptyList()
@@ -380,30 +384,19 @@ class DiscoveryApi(private val api: NeteaseApi) {
         }
     }
 
-    /** 搜索联想词（WEAPI search/suggest/web）：解析 allMatch 关键词+类型，fallback 到歌曲名 */
+    /** 搜索联想：明文接口 /api/search/suggest/web 返回 allMatch（关键词+类型），没有时退回 songs */
     fun getSearchSuggestions(keywords: String, cookies: Map<String, String>): List<SearchSuggestion> {
         val keyword = keywords.trim()
         if (keyword.isEmpty()) return emptyList()
         return try {
+            // 该接口的响应里没有 code 字段，不能按 200 校验（requireCode = false）
             val response = weapi(
                 path = "search/suggest/web",
                 payload = JSONObject().put("s", keyword),
                 cookies = cookies,
+                requireCode = false,
             )
-            val result = response.optJSONObject("result") ?: return emptyList()
-            val allMatch = result.optJSONArray("allMatch")
-            if (allMatch != null && allMatch.length() > 0) {
-                return (0 until allMatch.length()).mapNotNull { i ->
-                    val item = allMatch.getJSONObject(i)
-                    val word = item.optString("keyword").trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                    if (word == keyword) null else SearchSuggestion(word, SearchCategory.fromApiType(item.optInt("type", 1)))
-                }.distinctBy { it.keyword to it.category }.take(8)
-            }
-            val songs = result.optJSONArray("songs") ?: return emptyList()
-            (0 until songs.length()).mapNotNull { i ->
-                val name = songs.getJSONObject(i).optString("name").trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                if (name == keyword) null else SearchSuggestion(name, SearchCategory.SONGS)
-            }.distinctBy { it.keyword }.take(8)
+            parseSearchSuggestions(response.toString(), keyword)
         } catch (e: Exception) {
             emptyList()
         }
@@ -449,3 +442,26 @@ data class StyleTag(
     val name: String,
     val category: String = "",
 )
+
+/**
+ * 解析搜索联想响应。
+ *
+ * 明文接口返回 `result.allMatch`（关键词 + 类型）；部分关键词只返回 `result.songs`。
+ * 这里统一成 [SearchSuggestion]，并去掉与输入完全相同的项。
+ */
+internal fun parseSearchSuggestions(raw: String, keyword: String): List<SearchSuggestion> {
+    val result = runCatching { JSONObject(raw).optJSONObject("result") }.getOrNull() ?: return emptyList()
+    val allMatch = result.optJSONArray("allMatch")
+    if (allMatch != null && allMatch.length() > 0) {
+        return (0 until allMatch.length()).mapNotNull { i ->
+            val item = allMatch.getJSONObject(i)
+            val word = item.optString("keyword").trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            if (word == keyword) null else SearchSuggestion(word, SearchCategory.fromApiType(item.optInt("type", 1)))
+        }.distinctBy { it.keyword to it.category }.take(8)
+    }
+    val songs = result.optJSONArray("songs") ?: return emptyList()
+    return (0 until songs.length()).mapNotNull { i ->
+        val name = songs.getJSONObject(i).optString("name").trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        if (name == keyword) null else SearchSuggestion(name, SearchCategory.SONGS)
+    }.distinctBy { it.keyword }.take(8)
+}

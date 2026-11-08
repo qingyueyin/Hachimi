@@ -6,39 +6,8 @@ import org.json.JSONObject
 
 class LoginApi(private val api: NeteaseApi) {
 
-    data class QrResult(val unikey: String, val sessionCookies: Map<String, String> = emptyMap())
-    data class QrStatus(val code: Int, val cookies: Map<String, String> = emptyMap(), val message: String = "")
     data class LoginStatus(val isLoggedIn: Boolean, val userId: Long = 0, val nickname: String = "", val avatarUrl: String = "")
     data class RegisterAnonResult(val musicA: String, val cookies: Map<String, String>)
-
-    fun qrKey(): QrResult? {
-        val raw = api.eapiPost("login/qrcode/unikey", JSONObject().put("type", 3).toString(), emptyMap())
-        val obj = JSONObject(raw)
-        if (obj.optLong("code") != 200L) return null
-        val unikey = obj.optString("unikey").takeIf { it.isNotBlank() } ?: return null
-        val setCookieStr = obj.optString("cookie", "")
-        val sessionCookies = if (setCookieStr.isNotBlank()) parseCookieString(setCookieStr) else emptyMap()
-        return QrResult(unikey, sessionCookies)
-    }
-
-    fun checkQr(unikey: String, sessionCookies: Map<String, String> = emptyMap()): QrStatus {
-        val payload = JSONObject().put("key", unikey).put("type", 3).toString()
-        return api.eapiPostRaw("login/qrcode/client/login", payload, sessionCookies).use { response ->
-            val raw = response.body.string()
-            val obj = JSONObject(raw)
-            val code = obj.optLong("code")
-            when {
-                code == 803L -> {
-                    val cookies = parseCookiesFromHeaders(response.headers)
-                    if (cookies.containsKey("MUSIC_U")) QrStatus(803, cookies = cookies, message = "login success")
-                    else QrStatus(803, message = "no MUSIC_U")
-                }
-                code == 802L -> QrStatus(802, message = "scanned, confirm on phone")
-                code == 801L -> QrStatus(801, message = "waiting for scan")
-                else -> QrStatus(code.toInt(), message = obj.optString("message", "unknown"))
-            }
-        }
-    }
 
     fun registerAnonimous(): RegisterAnonResult? {
         return try {
@@ -83,14 +52,6 @@ class LoginApi(private val api: NeteaseApi) {
         }
     }
 
-    fun refreshLogin(cookies: Map<String, String>): Boolean {
-        return try {
-            val raw = api.eapiPost("login/token/refresh", "{}", cookies)
-            val obj = JSONObject(raw)
-            obj.optLong("code") == 200L
-        } catch (_: Exception) { false }
-    }
-
     private fun generateDeviceId(): String {
         val hexChars = "0123456789ABCDEF"
         return (1..52).map { hexChars.random() }.joinToString("")
@@ -115,19 +76,4 @@ class LoginApi(private val api: NeteaseApi) {
         }.toMap()
     }
 
-    private fun parseCookiesFromHeaders(headers: okhttp3.Headers): Map<String, String> {
-        val result = mutableMapOf<String, String>()
-        val setCookies = headers.values("Set-Cookie")
-        for (setCookie in setCookies) {
-            for (part in setCookie.split(";")) {
-                val eq = part.indexOf('=')
-                if (eq > 0) {
-                    val key = part.substring(0, eq).trim()
-                    val value = part.substring(eq + 1).trim()
-                    if (CookieManager.KEY_COOKIES.contains(key)) result[key] = value
-                }
-            }
-        }
-        return result
-    }
 }

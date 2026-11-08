@@ -56,6 +56,12 @@ internal fun floatingContentBottomPadding(systemBottom: Dp, hasFloatingBar: Bool
         0.dp
     }
 
+/** Miuix NavigationBar：itemHeight 64dp + bottomPadding 8dp */
+internal val DockedNavigationBarHeight = 72.dp
+
+internal fun dockedContentBottomPadding(systemBottom: Dp): Dp =
+    systemBottom + DockedNavigationBarHeight
+
 val LocalMainBottomContentPadding = staticCompositionLocalOf { ContentBreathingRoom }
 
 internal fun visibleMainTabs(isLoggedIn: Boolean): List<Tab> =

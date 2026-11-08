@@ -402,26 +402,6 @@ class NeteaseRepository(
 
     fun cookieManager(): CookieManager = cookieManager
 
-    suspend fun qrKey(): LoginApi.QrResult? = withContext(Dispatchers.IO) {
-        try {
-            loginApi.qrKey()
-        } catch (e: Exception) {
-            e.rethrowIfCancellation()
-            AppLogger.error("qrKey failed", e)
-            null
-        }
-    }
-
-    suspend fun checkQr(unikey: String, sessionCookies: Map<String, String> = emptyMap()): LoginApi.QrStatus = withContext(Dispatchers.IO) {
-        try {
-            loginApi.checkQr(unikey, sessionCookies)
-        } catch (e: Exception) {
-            e.rethrowIfCancellation()
-            AppLogger.error("checkQr failed", e)
-            LoginApi.QrStatus(-1, message = "检查状态失败: ${e.message}")
-        }
-    }
-
     // ── Discovery methods ──
 
     suspend fun getChartList(): Result<List<ChartInfo>> = withContext(Dispatchers.IO) {

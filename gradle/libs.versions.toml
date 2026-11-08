@@ -9,7 +9,7 @@ okhttp = "5.5.1"
 kotlinxSerializationJson = "1.12.0"
 coil = "3.6.3"
 coroutines = "1.11.0"
-miuix = "0.9.3"
+miuix = "0.9.4"
 materialKolor = "5.0.1"
 zxing = "3.5.4"
 securityCrypto = "1.1.0"
@@ -44,8 +44,7 @@ zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" 
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 androidx-navigation3-runtime = { group = "androidx.navigation3", name = "navigation3-runtime", version.ref = "navigation3" }
 androidx-navigationevent-compose = { group = "androidx.navigationevent", name = "navigationevent-compose", version.ref = "navigationevent" }
-miuix-navigation3-ui = { module = "top.yukonga.miuix.kmp:miuix-navigation3-ui-android", version.ref = "miuix" }
-
+miuix-nav-android = { module = "top.yukonga.miuix.kmp:miuix-nav-android", version.ref = "miuix" }
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
