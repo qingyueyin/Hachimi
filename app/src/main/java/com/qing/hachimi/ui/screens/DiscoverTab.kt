@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -476,7 +475,7 @@ private fun <T> HorizontalSection(
     }
 }
 
-@OptIn(ExperimentalScrollBarApi::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalScrollBarApi::class)
 @Composable
 private fun DiscoverCategory(
     state: DiscoverUiState,
@@ -552,16 +551,8 @@ private fun DiscoverCategory(
     val gridState = rememberLazyGridState()
     CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(gridState).value) {
     Box(modifier = Modifier.fillMaxSize()) {
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val availableWidth = maxWidth
-        LazyVerticalGrid(
-        columns = GridCells.Fixed(
-            adaptiveGridColumns(
-                userColumns = state.gridColumns,
-                availableWidth = availableWidth,
-                isWide = rememberIsWideScreen(),
-            )
-        ),
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(state.gridColumns),
         state = gridState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -627,7 +618,6 @@ private fun DiscoverCategory(
         adapter = rememberScrollBarAdapter(gridState),
         modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
     )
-    }
     }
 }
 }

@@ -236,22 +236,6 @@ fun retry() {
 |---|---|
 | **SukiSU-Ultra** | KernelSU 管理器（Rust + Android）。其 manager/ 目录为 Android 端，参考 UI 风格与图标设计 |
 
-## 平板适配 (2026-11-02)
-
-宽屏（窗口宽度 ≥ 840dp，与 Miuix `DialogDefaults.isLargeScreen` 断点一致）走平板布局，手机端完全不变：
-
-- **左侧导航栏**：Miuix `NavigationRail`（可展开/收起，状态由 `rememberNavigationRailState` 保存）替代底部悬浮条；实现见 `MainScreen.kt` 的 `MainNavigationRail`。内容区放在外层 `Row` 里 `weight(1f)`。
-- **内容限宽**：`AdaptiveLayout.kt` 的 `WidthLimiter` 把 Tab 内容限宽 640dp 居中；顶部磨砂层（TopChromeOverlay）保持全宽，只限内容不限模糊。
-- **网格自适应**：`AdaptiveLayout.kt` 的 `adaptiveGridColumns()` 在宽屏下按"单元格不超过 280dp"自动加列（用户列数只增不减）；`DiscoverTab.kt` 的 `DiscoverCategory` 用 `BoxWithConstraints` 提供可用宽度。
-- **对话框无需处理**：Miuix 0.9.3 的 `WindowDialog` 已内置大屏居中 + 限宽 420dp。
-- **底部内容内边距**：`floatingContentBottomPadding(hasFloatingBar = !isWide)`，宽屏不再为悬浮条预留空间。
-- 单元测试：`AdaptiveLayoutTest.kt`（断点判断 + 列数计算）；`FloatingNavigationLayoutTest` 的 tablet 分支测试此时生效。
-
-## 构建
-
-- **本机 SDK 37 的坑**：Google 已把 API 37 平台包改名为 `platforms;android-37.0`（小版本命名），AGP 9.1 按 `compileSdk = 37` 找不到 `android-37` 时会反复自动安装坏包。解决：`app/build.gradle.kts` 里用 `compileSdk = 37` + `compileSdkMinor = 0`（AGP 8.11+ 的 DSL，映射到 `android-37.0`）。`gradle.properties` 的 `android.suppressUnsupportedCompileSdk=37.0` 同理。
-- 不要手改 `D:\Env\Android\platforms\android-37.0` 里的 `package.xml` / `source.properties`（元数据是官方原样，`ApiLevel=37.0` 不是损坏），AGP 自动安装器会覆盖手工修改。
-
 ## 常见问题
 
 ### 一二级页面切换动画闪烁问题 ⚠️
@@ -403,3 +387,12 @@ BackHandler(enabled = settingsBackEnabled) {
 ├── 林俊杰/
     ├── 江南 - 林俊杰 [无损].flac
 ```
+
+## 依赖版本 (2026-11-02)
+
+- 工具链：Gradle 9.8.2（wrapper 走阿里云镜像）+ AGP 9.5.0 + Kotlin 2.4.21；AGP 9.5 官方支持 API 37。
+- `compileSdk = 37` + `compileSdkMinor = 0`：匹配 Google 新命名 `platforms;android-37.0`（API 37 起平台包带小版本号，AGP 按 `android-37` 找不到）。
+- **Miuix 停在 0.9.3**：0.9.4 未发布 `miuix-navigation3-ui-android` 模块，整组升 0.9.4 会解析失败；等上游补齐该模块后再整体升。
+- 版本联动：`kotlin` 版本同时驱动 kotlin-gradle-plugin、compose 编译器插件和 serialization 插件；升级 Kotlin 时这些会一起变。
+- material-kolor 5.0.1 与 4.x 的 `PaletteStyle` / `ColorSpec` API 兼容，不需要改业务代码。
+- 验证标准（依赖升级必跑）：`:app:compileDebugKotlin` + `:app:testDebugUnitTest` + `:app:lintDebug` + `:app:assembleDebug`（debug 开启 R8，可验证混淆链路）。

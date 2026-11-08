@@ -96,8 +96,6 @@ android {
 
     lint {
         disable += "ExpiredTargetSdkVersion"
-        // AGP 9.1's ExperimentalDetector crashes on Kotlin 2.3 FIR symbols.
-        disable += setOf("UnsafeOptInUsageError", "UnsafeOptInUsageWarning")
     }
 }
 
