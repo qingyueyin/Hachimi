@@ -1137,11 +1137,13 @@ class DiscoverViewModel(
             )
             retryDetail = { loadArtistDetail(state.activeArtist, state.artistParentSourceMode) }
         } else if (state.isArtistPage || (state.sourceMode == SourceMode.ARTIST_DETAIL && state.isLoading)) {
-            // 「歌手」分类页进来时上一级就是该分类页，只弹掉详情那层；首页/搜索进来的一律退回首页
-            val fromCategory = state.artistParentSourceMode != SourceMode.SEARCH
+            // 歌手页只由歌手分类页进入，返回时一律回到首页、歌手分类层，
+            // 和进入前是哪种分类无关：歌手页会把 sourceMode 改写成 ARTIST_DETAIL，
+            // 照着它退回分类层，分类页就没有可显示的数据，会渲染成空列表。
             _uiState.value = state.copy(
-                levelStack = if (fromCategory) poppedStack else listOf(DiscoverLevel.HOME),
-                sourceMode = if (fromCategory) state.artistParentSourceMode else SourceMode.RECOMMEND,
+                levelStack = listOf(DiscoverLevel.HOME, DiscoverLevel.CATEGORY),
+                sourceMode = SourceMode.ARTISTS,
+                artistParentSourceMode = SourceMode.ARTISTS,
                 previousSourceMode = SourceMode.ARTIST_DETAIL,
                 songs = emptyList(),
                 selectedIds = emptySet(),

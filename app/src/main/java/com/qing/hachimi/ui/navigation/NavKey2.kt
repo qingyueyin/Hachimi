@@ -25,15 +25,21 @@ sealed class NavKey2 : NavKey {
     data object MyHome : NavKey2()
 
     // ---- 发现 ----
-    /** 分类页：比如榜单、歌单分类、新碟等，用 SourceMode 区分 */
+    /**
+     * 分类页：比如榜单、歌单分类、新碟等，当前显示哪种由 uiState 决定。
+     * 这类「内容是数据、不是页面身份」的 key 一律用 data object：带数据的 key 在数据变化时
+     * 会被当成新页面重建，重建瞬间露出「暂时没有内容」。
+     */
     @Serializable
-    data class DiscoverCategory(val mode: SourceMode) : NavKey2()
+    data object DiscoverCategory : NavKey2()
 
+    /** 详情页：歌单/榜单/专辑/歌手，内容同样由 uiState 决定 */
     @Serializable
-    data class DiscoverSongList(val mode: SourceMode, val title: String, val depth: Int = 0) : NavKey2()
+    data object DiscoverSongList : NavKey2()
 
+    /** 搜索页里的歌手详情：歌手由 SearchViewModel 当前状态决定 */
     @Serializable
-    data class ArtistDetail(val artistId: Long, val artistName: String) : NavKey2()
+    data object ArtistDetail : NavKey2()
 
     // ---- 搜索 ----
     @Serializable

@@ -156,7 +156,7 @@ fun SearchTab(
         onPodcastClick(podcast)
     }
     val onArtistClickNav: (ArtistResult) -> Unit = { artist ->
-        navStack.add(NavKey2.ArtistDetail(artist.id, artist.name))
+        navStack.add(NavKey2.ArtistDetail)
         onArtistClick(artist)
     }
     // 兜底：ViewModel 回到首页时（例如清空搜索），栈也回到首页

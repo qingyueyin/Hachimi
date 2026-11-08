@@ -247,6 +247,132 @@ class DiscoverViewModelTest {
     }
 
     @Test
+    fun `back from album opened inside artist page returns to artist page`() = runTest(dispatcher) {
+        val repository = repositoryWithHomeContent()
+        val artist = ArtistResult(id = 48161, name = "Ariana Grande", avatarUrl = "avatar")
+        val album = AlbumResult(id = 99, name = "Sweetener", artist = artist.name, coverUrl = "cover")
+        `when`(repository.getDiscoveryArtists(ArtistArea.HOT, 30, 0))
+            .thenReturn(Result.success(DiscoveryPage(items = listOf(artist), nextOffset = 30, hasMore = false)))
+        `when`(repository.getArtistProfile(artist.id)).thenReturn(
+            Result.success(ArtistProfile(id = artist.id, name = artist.name, coverUrl = "hero")),
+        )
+        `when`(repository.getArtistTopSongs(artist.id)).thenReturn(Result.success(emptyList()))
+        `when`(repository.getAlbumDetail(album.id.toString())).thenReturn(
+            Result.success(
+                CollectionContent(
+                    detail = CollectionDetail(
+                        kind = CollectionKind.ALBUM,
+                        id = album.id,
+                        title = album.name,
+                        subtitle = album.artist,
+                    ),
+                    songs = listOf(song(1, "曲目一")),
+                ),
+            ),
+        )
+        val viewModel = viewModel(repository)
+        advanceUntilIdle()
+
+        viewModel.setSourceMode(SourceMode.ARTISTS)
+        advanceUntilIdle()
+        viewModel.loadArtistDetail(artist)
+        advanceUntilIdle()
+        // 歌手页里点开一张专辑
+        viewModel.loadAlbumFromResult(album)
+        advanceUntilIdle()
+
+        viewModel.goBack()
+
+        val state = viewModel.uiState.value
+        // 返回一步落在歌手页（首页 → 歌手分类 → 歌手详情 → 专辑，弹出后是歌手详情）
+        assertEquals("levelStack=${state.levelStack}", 3, state.levelStack.size)
+        assertEquals("sourceMode", SourceMode.ARTIST_DETAIL, state.sourceMode)
+        assertEquals("sourceLabel", "歌手", state.sourceLabel)
+        assertEquals(artist, state.activeArtist)
+    }
+
+    @Test
+    fun `back from artist lands on artist category whatever category was open before`() = runTest(dispatcher) {
+        // 之前在哪个分类（这里用新碟）都不影响：返回必须是歌手分类页，且列表有数据
+        val repository = repositoryWithHomeContent()
+        val artist = ArtistResult(id = 48161, name = "Ariana Grande", avatarUrl = "avatar")
+        `when`(repository.getDiscoveryArtists(ArtistArea.HOT, 30, 0))
+            .thenReturn(Result.success(DiscoveryPage(items = listOf(artist), nextOffset = 30, hasMore = false)))
+        `when`(repository.getArtistProfile(artist.id)).thenReturn(
+            Result.success(ArtistProfile(id = artist.id, name = artist.name, coverUrl = "hero")),
+        )
+        `when`(repository.getArtistTopSongs(artist.id)).thenReturn(Result.success(emptyList()))
+        val viewModel = viewModel(repository)
+        advanceUntilIdle()
+
+        viewModel.setSourceMode(SourceMode.NEW_ALBUMS)
+        advanceUntilIdle()
+        viewModel.setSourceMode(SourceMode.ARTISTS)
+        advanceUntilIdle()
+        viewModel.loadArtistDetail(artist)
+        advanceUntilIdle()
+
+        viewModel.goBack()
+
+        val state = viewModel.uiState.value
+        assertEquals("levelStack=${state.levelStack}", 2, state.levelStack.size)
+        assertEquals("sourceMode", SourceMode.ARTISTS, state.sourceMode)
+        assertEquals("artists 不能为空", 1, state.artists.size)
+    }
+
+    @Test
+    fun `back from artist in artist category lands on category with data`() = runTest(dispatcher) {
+        val repository = repositoryWithHomeContent()
+        val artist = ArtistResult(id = 48161, name = "Ariana Grande", avatarUrl = "avatar")
+        `when`(repository.getDiscoveryArtists(ArtistArea.HOT, 30, 0))
+            .thenReturn(Result.success(DiscoveryPage(items = listOf(artist), nextOffset = 30, hasMore = false)))
+        `when`(repository.getArtistProfile(artist.id)).thenReturn(
+            Result.success(ArtistProfile(id = artist.id, name = artist.name, coverUrl = "hero")),
+        )
+        `when`(repository.getArtistTopSongs(artist.id)).thenReturn(Result.success(emptyList()))
+        val viewModel = viewModel(repository)
+        advanceUntilIdle()
+
+        viewModel.setSourceMode(SourceMode.ARTISTS)
+        advanceUntilIdle()
+        viewModel.loadArtistDetail(artist)
+        advanceUntilIdle()
+
+        viewModel.goBack()
+
+        val state = viewModel.uiState.value
+        // 落在分类层，且该层必须是有数据的歌手列表（否则 UI 显示「暂时没有内容」）
+        assertEquals("levelStack=${state.levelStack}", 2, state.levelStack.size)
+        assertEquals("sourceMode", SourceMode.ARTISTS, state.sourceMode)
+        assertEquals("artists 不能为空", 1, state.artists.size)
+    }
+
+    @Test
+    fun `back from artist opened outside artist category never lands on a category page`() = runTest(dispatcher) {
+        // 从「推荐」里的歌手进入：返回必须落在有数据的歌手分类页，不能停在空分类或首页
+        val repository = repositoryWithHomeContent()
+        val artist = ArtistResult(id = 48161, name = "Ariana Grande", avatarUrl = "avatar")
+        `when`(repository.getDiscoveryArtists(ArtistArea.HOT, 30, 0))
+            .thenReturn(Result.success(DiscoveryPage(items = listOf(artist), nextOffset = 30, hasMore = false)))
+        `when`(repository.getArtistProfile(artist.id)).thenReturn(
+            Result.success(ArtistProfile(id = artist.id, name = artist.name, coverUrl = "hero")),
+        )
+        `when`(repository.getArtistTopSongs(artist.id)).thenReturn(Result.success(emptyList()))
+        val viewModel = viewModel(repository)
+        advanceUntilIdle()
+
+        viewModel.loadArtistDetail(artist, SourceMode.RECOMMEND)
+        advanceUntilIdle()
+
+        viewModel.goBack()
+
+        val state = viewModel.uiState.value
+        assertEquals("levelStack=${state.levelStack}", listOf(DiscoverLevel.HOME, DiscoverLevel.CATEGORY), state.levelStack)
+        assertEquals("sourceMode", SourceMode.ARTISTS, state.sourceMode)
+        assertEquals("artists 不能为空", 1, state.artists.size)
+    }
+
+    @Test
     fun `reloading the same detail does not grow the back stack`() = runTest(dispatcher) {
         val repository = repositoryWithHomeContent()
         val artist = ArtistResult(id = 48161, name = "Ariana Grande", avatarUrl = "avatar")

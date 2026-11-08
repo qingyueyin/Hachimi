@@ -267,11 +267,11 @@ fun DiscoverTab(
 }
 
 /** 把 ViewModel 的层级映射为导航 key；详情层用数据键区分，保证横向切换时重建内容 */
-private fun DiscoverLevel.toNavKey(state: DiscoverUiState, depth: Int = 0): NavKey = when (this) {
+internal fun DiscoverLevel.toNavKey(state: DiscoverUiState, depth: Int = 0): NavKey = when (this) {
     DiscoverLevel.HOME -> NavKey2.DiscoverHome
-    DiscoverLevel.CATEGORY -> NavKey2.DiscoverCategory(state.sourceMode)
+    DiscoverLevel.CATEGORY -> NavKey2.DiscoverCategory
     // depth 只用于保证同一栈里两个详情 entry 的 key 不同（标题不参与显示）
-    DiscoverLevel.DETAIL -> NavKey2.DiscoverSongList(state.sourceMode, state.detailKey, depth)
+    DiscoverLevel.DETAIL -> NavKey2.DiscoverSongList
 }
 
 @OptIn(ExperimentalScrollBarApi::class)
