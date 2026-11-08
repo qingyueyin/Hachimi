@@ -82,6 +82,8 @@ data class MyUiState(
     val songs: List<Song> = emptyList(),
     val selectedIds: Set<Long> = emptySet(),
     val playlistName: String = "",
+    /** 歌单详情的封面、简介、播放量等，详情页头部用 */
+    val playlistDetail: com.qing.hachimi.data.model.CollectionDetail? = null,
     /** 是否停在歌单详情。导航层级由 MyTab 的返回栈持有，这里只留重建栈所需的最小信息 */
     val isPlaylistDetail: Boolean = false,
 ) {
@@ -335,15 +337,16 @@ class MyViewModel(
             playlistName = playlist.name,
         )
         viewModelScope.launch {
-            repository.getPlaylistSongs(playlist.id.toString()).fold(
-                onSuccess = { songs ->
-                    AppLogger.info("[MyVM] loadPlaylistSongs: SUCCESS, got ${songs.size} songs")
+            repository.getPlaylistDetail(playlist.id.toString()).fold(
+                onSuccess = { content ->
+                    AppLogger.info("[MyVM] loadPlaylistSongs: SUCCESS, got ${content.songs.size} songs")
                     _uiState.value = _uiState.value.copy(
-                        songs = songs,
+                        songs = content.songs,
+                        playlistDetail = content.detail,
                         isLoading = false,
                         selectedIds = emptySet(),
                         playlistName = playlist.name,
-                        statusMessage = "加载成功，共 ${songs.size} 首"
+                        statusMessage = "加载成功，共 ${content.songs.size} 首"
                     )
                 },
                 onFailure = { e ->
@@ -815,6 +818,7 @@ class MyViewModel(
             songs = emptyList(),
             selectedIds = emptySet(),
             playlistName = "",
+            playlistDetail = null,
             isPlaylistDetail = false,
         )
     }
@@ -825,6 +829,7 @@ class MyViewModel(
             songs = emptyList(),
             selectedIds = emptySet(),
             playlistName = "",
+            playlistDetail = null,
             isPlaylistDetail = false,
         )
     }

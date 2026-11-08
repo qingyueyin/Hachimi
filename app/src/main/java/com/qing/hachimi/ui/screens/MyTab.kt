@@ -69,6 +69,8 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import com.qing.hachimi.data.api.ListenDataApi
 import com.qing.hachimi.data.model.AlbumResult
 import com.qing.hachimi.data.model.ArtistResult
+import com.qing.hachimi.data.model.CollectionDetail
+import com.qing.hachimi.data.model.CollectionKind
 
 private data class MyEntry(
     val label: String,
@@ -1424,7 +1426,13 @@ private fun TwoColumnLazyList(
         verticalArrangement = verticalArrangement,
         horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
     ) {
-        entries.forEach { entry -> item(key = entry.key) { entry.content() } }
+        entries.forEach { entry ->
+            if (entry.fullLine) {
+                item(key = entry.key, span = { GridItemSpan(maxLineSpan) }) { entry.content() }
+            } else {
+                item(key = entry.key) { entry.content() }
+            }
+        }
     }
 }
 
@@ -1436,6 +1444,11 @@ private class TwoColumnListScope {
         list.forEachIndexed { index, value ->
             entries += TwoColumnEntry(key?.invoke(value) ?: index) { itemContent(value) }
         }
+    }
+
+    /** 整行条目：跨满所有列，用于详情头部这类不能拆成两半的内容 */
+    fun fullLine(content: @Composable () -> Unit) {
+        entries += TwoColumnEntry("fullLine_${entries.size}", fullLine = true, content = content)
     }
 
     /** 分页列表底部的“加载更多”按钮 */
@@ -1457,7 +1470,11 @@ private class TwoColumnListScope {
     }
 }
 
-private class TwoColumnEntry(val key: Any, val content: @Composable () -> Unit)
+private class TwoColumnEntry(
+    val key: Any,
+    val fullLine: Boolean = false,
+    val content: @Composable () -> Unit,
+)
 
 @OptIn(ExperimentalScrollBarApi::class)
 @Composable
@@ -1475,70 +1492,85 @@ private fun PlaylistDetailPage(
     val pagedPlaylistSongs = remember(state.songs, playlistPage) { listPage(state.songs, playlistPage) }
     LaunchedEffect(playlistPage) {
         if (playlistPage != previousPlaylistPage) {
-            listState.scrollToItem(0)
+            // 翻页后停在控制条，不把详情头部再顶满一屏
+            listState.scrollToItem(if (state.songs.isEmpty()) 0 else 1)
             previousPlaylistPage = playlistPage
         }
     }
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(top = innerPadding.calculateTopPadding()),
-    ) {
-        StatusMessage(state.statusMessage, modifier = Modifier.padding(horizontal = AppSpacing.md))
-        if (state.isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                LoadingIndicator("加载中...")
-            }
-        } else if (state.songs.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("暂无歌曲", color = colorScheme.onSurfaceVariantActions)
-            }
-        } else {
-            Column(Modifier.fillMaxSize()) {
-                SongControls(
-                    selectedCount = state.selectedIds.size,
-                    totalCount = state.songs.size,
-                    onSelectAll = onSelectAll,
-                    onDownload = onDownload,
-                    isPreparingDownloads = state.isPreparingDownloads,
-                    pagination = {
-                        ListPageNavigator(
-                            currentPage = playlistPage,
-                            itemCount = state.songs.size,
-                            onPageChange = { playlistPage = it },
-                            stateKey = state.playlistName,
+    val detail = state.playlistDetail ?: CollectionDetail(
+        kind = CollectionKind.PLAYLIST,
+        title = state.playlistName.ifBlank { "歌单" },
+    )
+    CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
+        Box(Modifier.fillMaxSize()) {
+            TwoColumnLazyList(
+                state = listState,
+                twoColumn = twoColumn,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = AppSpacing.md,
+                    end = AppSpacing.md,
+                    top = innerPadding.calculateTopPadding(),
+                    bottom = LocalMainBottomContentPadding.current,
+                ),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                fullLine {
+                    Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+                        CollectionDetailHeader(
+                            detail = detail,
+                            loadedCount = state.songs.size,
+                            loading = state.isLoading,
                         )
-                    },
-                )
-                CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
-                Box(Modifier.weight(1f).fillMaxWidth()) {
-                TwoColumnLazyList(
-                    state = listState,
-                    twoColumn = twoColumn,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = AppSpacing.md,
-                        end = AppSpacing.md,
-                        bottom = LocalMainBottomContentPadding.current,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    items(pagedPlaylistSongs, key = { it.id }) { song ->
-                        SongListItem(
-                            song = song,
-                            isSelected = song.id in state.selectedIds,
-                            progress = null,
-                            onToggle = { onToggleSong(song.id) },
-                        )
+                        StatusMessage(state.statusMessage)
                     }
                 }
-                VerticalScrollBar(
-                    adapter = rememberScrollBarAdapter(listState),
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                )
-                }
+                when {
+                    state.isLoading && state.songs.isEmpty() -> fullLine {
+                        Box(
+                            Modifier.fillMaxWidth().padding(vertical = AppSpacing.xxl),
+                            contentAlignment = Alignment.Center,
+                        ) { LoadingIndicator("加载中...") }
+                    }
+                    state.songs.isEmpty() -> fullLine {
+                        Box(
+                            Modifier.fillMaxWidth().padding(vertical = AppSpacing.xxl),
+                            contentAlignment = Alignment.Center,
+                        ) { Text("暂无歌曲", color = colorScheme.onSurfaceVariantActions) }
+                    }
+                    else -> {
+                        fullLine {
+                            SongControls(
+                                selectedCount = state.selectedIds.size,
+                                totalCount = state.songs.size,
+                                onSelectAll = onSelectAll,
+                                onDownload = onDownload,
+                                isPreparingDownloads = state.isPreparingDownloads,
+                                pagination = {
+                                    ListPageNavigator(
+                                        currentPage = playlistPage,
+                                        itemCount = state.songs.size,
+                                        onPageChange = { playlistPage = it },
+                                        stateKey = state.playlistName,
+                                    )
+                                },
+                            )
+                        }
+                        items(pagedPlaylistSongs, key = { it.id }) { song ->
+                            SongListItem(
+                                song = song,
+                                isSelected = song.id in state.selectedIds,
+                                progress = null,
+                                onToggle = { onToggleSong(song.id) },
+                            )
+                        }
+                    }
                 }
             }
+            VerticalScrollBar(
+                adapter = rememberScrollBarAdapter(listState),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            )
         }
     }
 }
