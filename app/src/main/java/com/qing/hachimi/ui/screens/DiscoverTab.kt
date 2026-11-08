@@ -163,9 +163,9 @@ fun DiscoverTab(
 ) {
     val horizontalDirection = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1 else -1
     val level = uiState.currentLevel
-    // 一级页和二级页各用固定的顶部内边距，切页时内容不会跟着顶栏一起重排
-    val primaryPadding = stablePagePadding(innerPadding, contextPage = false)
-    val contextPadding = stablePagePadding(innerPadding, contextPage = true)
+    // 顶栏高度由 Miuix TopAppBar 决定，一级页和二级页统一使用 Scaffold 给的内边距
+    val primaryPadding = innerPadding
+    val contextPadding = innerPadding
     val sortedSongs = remember(uiState.songs, sortOption, sortAscending) {
         uiState.songs.sortedByOption(sortOption, sortAscending)
     }
@@ -199,7 +199,6 @@ fun DiscoverTab(
                 onPodcastClick = onPodcastClick,
                 onArtistClick = onArtistClick,
                 onAlbumClick = onAlbumClick,
-                onRefresh = onRefresh,
                 onRetry = onRetry,
                 innerPadding = primaryPadding,
                 scrollToTopTrigger = scrollToTopTrigger,
@@ -286,7 +285,6 @@ private fun DiscoverHome(
     onPodcastClick: (PodcastChannel) -> Unit,
     onArtistClick: (ArtistResult) -> Unit,
     onAlbumClick: (AlbumResult) -> Unit,
-    onRefresh: () -> Unit,
     onRetry: () -> Unit,
     innerPadding: PaddingValues,
     scrollToTopTrigger: Int = 0,
@@ -310,9 +308,10 @@ private fun DiscoverHome(
         ),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.lg),
     ) {
-        item {
-            ScreenHeading("精选推荐", onRefresh = onRefresh)
-            StatusMessage(state.statusMessage, onRetry = onRetry)
+        state.statusMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            item {
+                StatusMessage(message, onRetry = onRetry)
+            }
         }
         item { DestinationGrid(onOpen) }
         if (isLoggedIn) {

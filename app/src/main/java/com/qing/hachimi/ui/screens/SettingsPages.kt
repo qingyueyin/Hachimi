@@ -62,9 +62,9 @@ internal fun SettingsNavHost(
     onCookieLoginClick: () -> Unit,
     onMusicULoginClick: () -> Unit,
 ) {
-    // 一级页和二级页各用固定的顶部内边距，切页时内容不会跟着顶栏一起重排
-    val primaryPadding = stablePagePadding(innerPadding, contextPage = false)
-    val contextPadding = stablePagePadding(innerPadding, contextPage = true)
+    // 顶栏高度由 Miuix TopAppBar 决定，一级页和二级页统一使用 Scaffold 给的内边距
+    val primaryPadding = innerPadding
+    val contextPadding = innerPadding
     NavDisplay(
         backStack = navBackStack,
         modifier = Modifier.fillMaxSize(),

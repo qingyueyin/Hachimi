@@ -75,9 +75,10 @@ fun SearchTab(
     downloadProgress: Map<Long, DownloadProgress>,
     onBack: () -> Unit = {},
     artistDetailContent: @Composable () -> Unit = {},
-    onSearchQueryChange: (String) -> Unit,
+    inputMode: InputMode,
+    searchInteraction: MutableInteractionSource,
+    topBarBottomY: Int,
     onSearch: () -> Unit,
-    onParseUrl: (String) -> Unit = {},
     onToggleSelect: (Long) -> Unit,
     onSelectAll: () -> Unit,
     onSetSearchCategory: (SearchCategory) -> Unit,
@@ -98,24 +99,20 @@ fun SearchTab(
     sortAscending: Boolean = true,
     scrollToTopTrigger: Int = 0,
 ) {
-    var inputMode by remember { mutableStateOf(InputMode.SEARCH) }
-    var urlInput by remember { mutableStateOf("") }
-    val searchInteraction = remember { MutableInteractionSource() }
     val isInputFocused by searchInteraction.collectIsFocusedAsState()
 
     val sortedSongs = remember(state.songs, sortOption, sortAscending) {
         state.songs.sortedByOption(sortOption, sortAscending)
     }
-    // 一级页和二级页各用固定的顶部内边距，切页时内容不会跟着顶栏一起重排
-    val primaryPadding = stablePagePadding(innerPadding, contextPage = false)
-    val contextPadding = stablePagePadding(innerPadding, contextPage = true)
+    // 顶栏高度由 Miuix TopAppBar 决定，一级页和二级页统一使用 Scaffold 给的内边距
+    val primaryPadding = innerPadding
+    val contextPadding = innerPadding
 
     val resultPageKey = "${state.searchQuery}:${state.searchCategory.name}"
     val resultListState = rememberLazyListState()
     var currentPage by remember(resultPageKey) { mutableIntStateOf(0) }
     var previousPage by remember(resultPageKey) { mutableIntStateOf(0) }
 
-    var inputBarBottomY by remember { mutableIntStateOf(0) }
     var boxTopY by remember { mutableIntStateOf(0) }
     // 面板是否该显示：只看「聚焦 + 有联想词」。
     // 不能把 suggestionsVisible 当条件——请求回来时它不会变，副作用不会重跑，面板永远出不来。
@@ -188,31 +185,7 @@ fun SearchTab(
                 top = primaryPadding.calculateTopPadding()
             )
         ) {
-            // Search/URL input bar
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onGloballyPositioned {
-                        inputBarBottomY = it.positionInWindow().y.toInt() + it.size.height
-                    }
-            ) {
-                SearchInputBar(
-                    url = urlInput,
-                    searchQuery = state.searchQuery,
-                    inputMode = inputMode,
-                    onInputModeChange = { inputMode = it },
-                    onUrlChange = { urlInput = it },
-                    onSearchQueryChange = onSearchQueryChange,
-                    onParse = { onParseUrl(urlInput) },
-                    onSearch = onSearch,
-                    isLoading = state.isSearching,
-                    isSearching = state.isSearching,
-                    interactionSource = searchInteraction,
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-
-            // Status message (errors only)
+            // 搜索框在顶栏里，这里只放状态、分类和结果
             state.statusMessage?.let { msg ->
                 val isError = msg.contains("失败") || msg.contains("错误") || msg.contains("超时")
                 if (isError) {
@@ -427,7 +400,7 @@ fun SearchTab(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(start = 12.dp, end = 12.dp)
-                    .offset { IntOffset(0, inputBarBottomY - boxTopY + 12.dp.toPx().toInt()) },
+                    .offset { IntOffset(0, topBarBottomY - boxTopY + 12.dp.toPx().toInt()) },
                 onSuggestionClick = onSuggestionClick,
                 onSearchQuery = onSearch,
             )

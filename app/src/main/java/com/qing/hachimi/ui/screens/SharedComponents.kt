@@ -19,13 +19,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -54,7 +54,6 @@ import top.yukonga.miuix.kmp.icon.extended.Search
 import top.yukonga.miuix.kmp.icon.extended.Link
 import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.icon.extended.Download
-import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.window.WindowListPopup
@@ -88,44 +87,6 @@ fun PageSurface(
             .background(MiuixTheme.colorScheme.surface),
     ) {
         content()
-    }
-}
-
-@Composable
-fun SecondaryPageHeader(
-    title: String,
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier,
-    titleAlpha: () -> Float = { 1f },
-    actions: @Composable RowScope.() -> Unit = {},
-) {
-    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    Row(
-        modifier = modifier.fillMaxWidth().height(44.dp).padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(
-            onClick = onBack,
-            modifier = Modifier.size(40.dp),
-            minWidth = 40.dp,
-            minHeight = 40.dp,
-        ) {
-            Icon(
-                imageVector = MiuixIcons.Regular.Back,
-                contentDescription = "返回",
-                modifier = Modifier.size(21.dp).graphicsLayer { if (isRtl) scaleX = -1f },
-            )
-        }
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = title,
-            modifier = Modifier.weight(1f).graphicsLayer { alpha = titleAlpha().coerceIn(0f, 1f) },
-            style = MiuixTheme.textStyles.title2,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        actions()
     }
 }
 
@@ -1139,6 +1100,7 @@ fun SearchInputBar(
     isLoading: Boolean,
     isSearching: Boolean,
     interactionSource: MutableInteractionSource? = null,
+    insideMargin: DpSize = TextFieldDefaults.InsideMargin,
 ) {
     val isBusy = if (inputMode == InputMode.URL) isLoading else isSearching
     val value = if (inputMode == InputMode.URL) url else searchQuery
@@ -1156,6 +1118,7 @@ fun SearchInputBar(
         label = inputMode.placeholder,
         useLabelAsPlaceholder = true,
         modifier = Modifier.fillMaxWidth(),
+        insideMargin = insideMargin,
         singleLine = true,
         enabled = !isBusy,
         interactionSource = interactionSource,

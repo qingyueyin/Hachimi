@@ -37,9 +37,8 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
 import coil3.compose.AsyncImage
 import com.qing.hachimi.R
 import com.qing.hachimi.data.api.CloudApi
@@ -54,7 +53,6 @@ import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.interfaces.ExperimentalScrollBarApi
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Album
-import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
 import top.yukonga.miuix.kmp.icon.extended.CloudFill
 import top.yukonga.miuix.kmp.icon.extended.Contacts
 import top.yukonga.miuix.kmp.icon.extended.Favorites
@@ -117,9 +115,9 @@ fun MyTab(
     val twoColumnList = with(LocalDensity.current) {
         useTwoColumnListLayout(LocalWindowInfo.current.containerSize.width.toDp())
     }
-    // 一级页和二级页各用固定的顶部内边距，切页时内容不会跟着顶栏一起重排
-    val primaryPadding = stablePagePadding(innerPadding, contextPage = false)
-    val contextPadding = stablePagePadding(innerPadding, contextPage = true)
+    // 顶栏高度由 Miuix TopAppBar 决定，一级页和二级页统一使用 Scaffold 给的内边距
+    val primaryPadding = innerPadding
+    val contextPadding = innerPadding
     if (!isLoggedIn) {
         Box(
             modifier = Modifier.fillMaxSize().padding(primaryPadding),
@@ -185,14 +183,12 @@ fun MyTab(
                 MyList(
                     state = state,
                     onOpenSection = openSectionNav,
-                    onBack = backNav,
                     onPlaylistClick = openPlaylistNav,
                     onToggleSong = onToggleSong,
                     onSelectAll = onSelectAll,
                     onDownload = onDownload,
                     onLoadMoreCloud = onLoadMoreCloud,
                     onCloudSearchQueryChange = onCloudSearchQueryChange,
-                    onRefresh = onRefresh,
                     onSetRankType = onSetRankType,
                     onSetFootprintTab = onSetFootprintTab,
                     onLoadMoreAlbums = onLoadMoreAlbums,
@@ -208,7 +204,6 @@ fun MyTab(
             PageSurface {
                 PlaylistDetailPage(
                     state = state,
-                    onBack = backNav,
                     onToggleSong = onToggleSong,
                     onSelectAll = onSelectAll,
                     onDownload = onDownload,
@@ -263,10 +258,9 @@ private fun MyHome(
         ),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.lg),
     ) {
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)) {
-                ScreenHeading("我的", onRefresh = onRefresh)
-                StatusMessage(state.statusMessage, modifier = Modifier.padding(horizontal = AppSpacing.md))
+        state.statusMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            item {
+                StatusMessage(message, modifier = Modifier.padding(horizontal = AppSpacing.md))
             }
         }
         item {
@@ -346,10 +340,9 @@ private fun HomeGrid(
         verticalArrangement = Arrangement.spacedBy(AppSpacing.lg),
         horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
     ) {
-        fullLine {
-            Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)) {
-                ScreenHeading("我的", onRefresh = onRefresh)
-                StatusMessage(state.statusMessage, modifier = Modifier.padding(horizontal = AppSpacing.md))
+        state.statusMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            fullLine {
+                StatusMessage(message, modifier = Modifier.padding(horizontal = AppSpacing.md))
             }
         }
         fullLine {
@@ -573,14 +566,12 @@ private fun PlaylistCoverCard(playlist: PlaylistApi.UserPlaylist, onClick: () ->
 private fun MyList(
     state: MyUiState,
     onOpenSection: (MySection) -> Unit,
-    onBack: () -> Unit,
     onPlaylistClick: (PlaylistApi.UserPlaylist) -> Unit,
     onToggleSong: (Long) -> Unit,
     onSelectAll: () -> Unit,
     onDownload: () -> Unit,
     onLoadMoreCloud: () -> Unit,
     onCloudSearchQueryChange: (String) -> Unit,
-    onRefresh: () -> Unit,
     onSetRankType: (Int) -> Unit,
     onSetFootprintTab: (FootprintTab) -> Unit,
     onLoadMoreAlbums: () -> Unit,
@@ -591,13 +582,11 @@ private fun MyList(
     twoColumn: Boolean = false,
 ) {
     val sectionListStates = remember { mutableMapOf<MySection, LazyListState>() }
-    Column(Modifier.fillMaxSize()) {
-        ListTopBar(
-            title = state.section.label,
-            onBack = onBack,
-            onRefresh = onRefresh,
-            paddingTop = innerPadding.calculateTopPadding(),
-        )
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(top = innerPadding.calculateTopPadding()),
+    ) {
         StatusMessage(state.statusMessage, modifier = Modifier.padding(horizontal = AppSpacing.md))
         AnimatedContent(
             targetState = state.section,
@@ -1474,7 +1463,6 @@ private class TwoColumnEntry(val key: Any, val content: @Composable () -> Unit)
 @Composable
 private fun PlaylistDetailPage(
     state: MyUiState,
-    onBack: () -> Unit,
     onToggleSong: (Long) -> Unit,
     onSelectAll: () -> Unit,
     onDownload: () -> Unit,
@@ -1491,14 +1479,11 @@ private fun PlaylistDetailPage(
             previousPlaylistPage = playlistPage
         }
     }
-    Column(Modifier.fillMaxSize()) {
-        ListTopBar(
-            title = state.playlistName.ifBlank { "歌单" },
-            onBack = onBack,
-            onRefresh = { },
-            paddingTop = innerPadding.calculateTopPadding(),
-            showRefresh = false,
-        )
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(top = innerPadding.calculateTopPadding()),
+    ) {
         StatusMessage(state.statusMessage, modifier = Modifier.padding(horizontal = AppSpacing.md))
         if (state.isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1561,37 +1546,3 @@ private fun PlaylistDetailPage(
 // ═════════════════════════════════════════════════════════════════════════════
 // Shared small components
 // ═════════════════════════════════════════════════════════════════════════════
-
-@Composable
-private fun ListTopBar(
-    title: String,
-    onBack: () -> Unit,
-    onRefresh: () -> Unit,
-    paddingTop: Dp,
-    showRefresh: Boolean = true,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = paddingTop, end = AppSpacing.sm)
-            .height(44.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
-            Icon(MiuixIcons.ChevronBackward, "返回")
-        }
-        Text(
-            title,
-            modifier = Modifier.weight(1f),
-            style = MiuixTheme.textStyles.title2,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (showRefresh) {
-            IconButton(onClick = onRefresh, modifier = Modifier.size(36.dp)) {
-                Icon(MiuixIcons.Refresh, "刷新", tint = colorScheme.onSurfaceVariantActions)
-            }
-        }
-    }
-}

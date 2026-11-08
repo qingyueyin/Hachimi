@@ -214,7 +214,8 @@ private fun HachimiBlurBar(
                                 Modifier.textureBlur(
                                     backdrop = backdrop,
                                     shape = CircleShape,
-                                    blurRadius = with(density) { 25.dp.toPx() },
+                                    // 单位是 dp，库内部自己换算像素
+                                    blurRadius = 25f,
                                     colors = BlurColors(
                                         brightness = 0f,
                                         contrast = 1f,

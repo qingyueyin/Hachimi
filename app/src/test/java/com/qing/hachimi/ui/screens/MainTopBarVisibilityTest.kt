@@ -1,12 +1,7 @@
 package com.qing.hachimi.ui.screens
 
-import com.qing.hachimi.data.model.CollectionDetail
-import com.qing.hachimi.data.model.CollectionKind
-import com.qing.hachimi.data.model.SourceMode
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MainContextBackTargetTest {
@@ -30,102 +25,18 @@ class MainContextBackTargetTest {
     }
 
     @Test
-    fun `my playlist detail owns one back step`() {
+    fun `my section page owns one back step`() {
         assertEquals(ContextBackTarget.MY_SECTION, resolve(showMyPlaylistBack = true))
     }
 
     @Test
     fun `settings subpage uses the shared top bar`() {
-        val target = resolve(showDownloadSettings = true)
-
-        assertEquals(ContextBackTarget.DOWNLOAD_SETTINGS, target)
-        assertTrue(target!!.usesContextHeader)
+        assertEquals(ContextBackTarget.DOWNLOAD_SETTINGS, resolve(showDownloadSettings = true))
     }
 
     @Test
     fun `file and tag settings page uses the shared top bar`() {
-        val target = resolve(showFileTagSettings = true)
-
-        assertEquals(ContextBackTarget.FILE_TAG_SETTINGS, target)
-        assertTrue(target!!.usesContextHeader)
-    }
-
-    @Test
-    fun `content details use the contextual top bar`() {
-        assertTrue(resolve(showSearchSubBack = true)!!.usesContextHeader)
-        assertTrue(resolve(showDiscoverBack = true)!!.usesContextHeader)
-        assertFalse(resolve(showMyPlaylistBack = true)!!.usesContextHeader)
-    }
-
-    @Test
-    fun `top chrome offset follows consumed scroll only`() {
-        assertEquals(80f, calculateTopChromeScrollOffset(0f, consumedY = -80f), 0f)
-        assertEquals(48f, calculateTopChromeScrollOffset(80f, consumedY = 32f), 0f)
-        assertEquals(0f, calculateTopChromeScrollOffset(48f, consumedY = 80f), 0f)
-    }
-
-    @Test
-    fun `discover detail has a different top chrome page key from its parent`() {
-        val parent = resolveTopChromePageKey(
-            currentTab = Tab.DISCOVER,
-            contextBackTarget = ContextBackTarget.DISCOVER,
-            discoverState = DiscoverUiState(sourceMode = SourceMode.CHARTS),
-            searchState = SearchUiState(),
-            myState = MyUiState(),
-        )
-        val detail = resolveTopChromePageKey(
-            currentTab = Tab.DISCOVER,
-            contextBackTarget = ContextBackTarget.DISCOVER,
-            discoverState = DiscoverUiState(
-                sourceMode = SourceMode.CHARTS,
-                sourceLabel = "榜单",
-                collectionDetail = CollectionDetail(
-                    kind = CollectionKind.CHART,
-                    id = 19723756L,
-                    title = "飙升榜",
-                ),
-            ),
-            searchState = SearchUiState(),
-            myState = MyUiState(),
-        )
-
-        assertTrue(parent != detail)
-    }
-
-    @Test
-    fun `top chrome page key stays stable when the same detail finishes loading`() {
-        val initial = DiscoverUiState(
-            sourceMode = SourceMode.CHARTS,
-            sourceLabel = "榜单",
-            collectionDetail = CollectionDetail(
-                kind = CollectionKind.CHART,
-                id = 19723756L,
-                title = "飙升榜",
-            ),
-        )
-        val loaded = initial.copy(
-            collectionDetail = initial.collectionDetail!!.copy(
-                description = "updated",
-                expectedItemCount = 200,
-            ),
-        )
-
-        assertEquals(
-            resolveTopChromePageKey(
-                Tab.DISCOVER,
-                ContextBackTarget.DISCOVER,
-                initial,
-                SearchUiState(),
-                MyUiState(),
-            ),
-            resolveTopChromePageKey(
-                Tab.DISCOVER,
-                ContextBackTarget.DISCOVER,
-                loaded,
-                SearchUiState(),
-                MyUiState(),
-            ),
-        )
+        assertEquals(ContextBackTarget.FILE_TAG_SETTINGS, resolve(showFileTagSettings = true))
     }
 
     private fun resolve(

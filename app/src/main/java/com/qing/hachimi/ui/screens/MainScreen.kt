@@ -4,19 +4,19 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -66,6 +66,7 @@ import top.yukonga.miuix.kmp.icon.extended.Music
 import top.yukonga.miuix.kmp.icon.extended.Search
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.icon.extended.Delete
+import top.yukonga.miuix.kmp.icon.extended.Refresh
 
 
 enum class Tab(val label: String, val icon: ImageVector) {
@@ -95,6 +96,11 @@ fun MainScreen(
     val myUiState by myViewModel.uiState.collectAsStateWithLifecycle()
     val discoverState by discoverViewModel.uiState.collectAsStateWithLifecycle()
     val searchState by searchViewModel.uiState.collectAsStateWithLifecycle()
+    // 搜索框放在顶栏里，输入状态由主界面持有，切换页面后文字不丢
+    var searchInputMode by remember { mutableStateOf(InputMode.SEARCH) }
+    var searchUrlInput by remember { mutableStateOf("") }
+    val searchInputInteraction = remember { MutableInteractionSource() }
+    var searchBarBottomY by remember { mutableIntStateOf(0) }
     var currentTab by remember { mutableStateOf(Tab.DISCOVER) }
     LaunchedEffect(currentTab) {
         AppLogger.currentScreen = "Tab.${currentTab.name}"
@@ -308,7 +314,23 @@ fun MainScreen(
         showMyPlaylistBack = showMyBack,
         showSearchSubBack = showSearchSubBack,
     )
-    val showContextHeader = contextBackTarget?.usesContextHeader == true
+    val showBack = contextBackTarget != null
+    // 所有页面共用一条 Miuix 顶栏，标题跟着当前页面走
+    val topBarTitle = when {
+        showDiscoverBack -> discoverState.navigationTitle
+        showSearchSubBack -> searchState.playlistName.ifEmpty { "歌曲" }
+        showMyBack -> if (myUiState.isPlaylistDetail) {
+            myUiState.playlistName.ifBlank { "歌单" }
+        } else {
+            myUiState.section.label
+        }
+        else -> if (currentTab == Tab.SETTINGS) {
+            settingsNavTop.settingsTitle() ?: currentTab.label
+        } else {
+            // 二级页标题只在设置 Tab 内有效，切到别的 Tab 后不能残留
+            currentTab.label
+        }
+    }
 
     LaunchedEffect(uiState.statusMessage) {
         uiState.statusMessage?.let {
@@ -355,28 +377,6 @@ fun MainScreen(
         enableBlur = shouldCaptureFloatingBackdrop(uiState.blurEffect, uiState.liquidGlass),
     )
 
-    // 顶部磨砂层依据的滚动距离（px）：各 Tab 的滚动容器通过 nestedScroll 上报实际消费的位移。
-    // 距离顶部越近越透明，完全到顶为 0（不显示）；远离顶部时固定为满模糊。
-    // 同一 Tab 的页面分别保存进度，避免列表页的滚动距离泄漏到新打开的详情页。
-    val density = LocalDensity.current
-    val topChromePageKey = resolveTopChromePageKey(
-        currentTab = currentTab,
-        contextBackTarget = contextBackTarget,
-        discoverState = discoverState,
-        searchState = searchState,
-        myState = myUiState,
-    )
-    val topChromeScrollOffsets = remember {
-        mutableMapOf<TopChromePageKey, MutableFloatState>()
-    }
-    val topChromeScrollOffset = remember(topChromePageKey) {
-        topChromeScrollOffsets.getOrPut(topChromePageKey) { mutableFloatStateOf(0f) }
-    }
-    LaunchedEffect(currentTab) {
-        topChromeScrollOffsets.keys.removeAll { it.tab != currentTab }
-        topChromeScrollOffset.floatValue = 0f
-    }
-
     val performContextBack: () -> Unit = {
         when (contextBackTarget) {
             ContextBackTarget.APPEARANCE_SETTINGS,
@@ -408,19 +408,6 @@ fun MainScreen(
     // 返回手势与预测性返回动画由各 Tab 的 NavDisplay 统一处理，这里不再手写位移
     val suppressNavTransition = false
 
-    val topChromeFadeDistancePx = with(density) {
-        (if (showContextHeader) 44.dp + 96.dp else AppSpacing.sm + 56.dp).toPx()
-    }
-    // 顶部磨砂的进度：0 = 完全透明，1 = 不透明。
-    // 只在绘制阶段读取滚动值；如果在组合里读，滚动每变化一像素都会重组整个主界面。
-    val topChromeProgress: () -> Float = {
-        if (showContextHeader || currentTab != Tab.SEARCH) {
-            (topChromeScrollOffset.floatValue / topChromeFadeDistancePx).coerceIn(0f, 1f)
-        } else {
-            0f
-        }
-    }
-
     Row(modifier = Modifier.fillMaxSize()) {
         if (useRail) {
             MainNavigationRail(
@@ -444,36 +431,70 @@ fun MainScreen(
         CompositionLocalProvider(LocalSuppressNavTransition provides suppressNavTransition) {
         Scaffold(
             topBar = {
-                if (showContextHeader) {
-                    ContextPageHeader(
-                        onBackClick = performContextBack,
-                        customTitle = when {
-                            showDiscoverBack -> discoverState.navigationTitle
-                            showSearchSubBack -> searchState.playlistName.ifEmpty { "歌曲" }
-                            else -> settingsNavTop.settingsTitle() ?: currentTab.label
-                        },
-                        // 详情页的内容顶部本来就有大标题，磨砂栏的标题跟着滚动渐显，避免同一屏出现两遍
-                        titleAlpha = if (
-                            (showDiscoverBack && discoverState.isDetailView) || showSearchSubBack
-                        ) topChromeProgress else { { 1f } },
-                        actions = {
-                            if (
-                                showDiscoverBack &&
-                                !discoverState.isDetailView &&
-                                !discoverState.isLoading &&
-                                discoverState.sourceMode != SourceMode.RECOMMEND
-                            ) {
-                                DiscoverCategoryActions(
-                                    sourceMode = discoverState.sourceMode,
-                                    columns = discoverState.gridColumns,
-                                    onRefresh = discoverViewModel::refreshCurrentSource,
-                                    onSetColumns = discoverViewModel::setGridColumns,
-                                )
-                            }
-                        },
-                    )
-                } else {
-                    PrimaryPageTopInset()
+                val blurActive = uiState.blurEffect && backdrop != null
+                FrostedBar(backdrop = backdrop, blurEnabled = uiState.blurEffect) {
+                    if (currentTab == Tab.SEARCH && !showSearchSubBack) {
+                        // 搜索页：搜索框本身就是顶栏
+                        SearchTopBar(
+                            modifier = Modifier.onGloballyPositioned {
+                                searchBarBottomY = it.positionInWindow().y.toInt() + it.size.height
+                            },
+                            url = searchUrlInput,
+                            searchQuery = searchState.searchQuery,
+                            inputMode = searchInputMode,
+                            onInputModeChange = { searchInputMode = it },
+                            onUrlChange = { searchUrlInput = it },
+                            onSearchQueryChange = searchViewModel::updateSearchQuery,
+                            onParse = {
+                                searchViewModel.updatePlaylistUrl(searchUrlInput)
+                                searchViewModel.parseUrl()
+                            },
+                            onSearch = searchViewModel::search,
+                            isLoading = searchState.isSearching,
+                            isSearching = searchState.isSearching,
+                            interactionSource = searchInputInteraction,
+                        )
+                    } else {
+                        SmallTopAppBar(
+                            title = topBarTitle,
+                            color = if (blurActive) Color.Transparent else colorScheme.surface,
+                            navigationIcon = {
+                                if (showBack) {
+                                    TopBarBackButton(onClick = performContextBack)
+                                }
+                            },
+                            actions = {
+                                if (showDiscoverBack) {
+                                    if (
+                                        !discoverState.isDetailView &&
+                                        !discoverState.isLoading &&
+                                        discoverState.sourceMode != SourceMode.RECOMMEND
+                                    ) {
+                                        DiscoverCategoryActions(
+                                            sourceMode = discoverState.sourceMode,
+                                            columns = discoverState.gridColumns,
+                                            onRefresh = discoverViewModel::refreshCurrentSource,
+                                            onSetColumns = discoverViewModel::setGridColumns,
+                                        )
+                                    }
+                                } else if (showMyBack) {
+                                    if (!myUiState.isPlaylistDetail) {
+                                        IconButton(onClick = { myViewModel.refreshCurrentSection() }) {
+                                            Icon(MiuixIcons.Refresh, "刷新")
+                                        }
+                                    }
+                                } else if (currentTab == Tab.MY && uiState.isLoggedIn) {
+                                    IconButton(onClick = { myViewModel.refreshCurrentSection() }) {
+                                        Icon(MiuixIcons.Refresh, "刷新")
+                                    }
+                                } else if (currentTab == Tab.DISCOVER) {
+                                    IconButton(onClick = { discoverViewModel.refreshCurrentSource() }) {
+                                        Icon(MiuixIcons.Refresh, "刷新")
+                                    }
+                                }
+                            },
+                        )
+                    }
                 }
             },
             contentWindowInsets = WindowInsets.systemBars
@@ -500,6 +521,9 @@ fun MainScreen(
                     viewModel = viewModel,
                     navBackStack = navBackStack,
                     searchNavStack = searchNavStack,
+                    searchInputMode = searchInputMode,
+                    searchInteraction = searchInputInteraction,
+                    searchBarBottomY = searchBarBottomY,
                     onPopSettingsPage = popSettingsPage,
                     innerPadding = innerPadding,
                     isWideLayout = isWideLayout,
@@ -549,25 +573,10 @@ fun MainScreen(
                     onImportClick = { showImportDialog = true },
                     onOpenStoragePermissionSettings = openStoragePermissionSettings,
                     sessionStartedAt = downloadSessionStartedAt,
-                    topChromeScrollOffset = topChromeScrollOffset,
                         )
                         }
                     }
                 }
-
-                // 顶部渐变模糊层：位于 body 之上、Scaffold topBar（标题栏）之下。
-                // 由“距顶部距离”决定透明度：远离顶部（已滚过标题区）时满模糊固定显示；
-                // 仅当滚动接近顶部（滚动偏移小于标题区+fade 高度）时才渐出，回顶即完全取消。
-                // topBar 在 Scaffold 中被绘制在此层之上，标题保持清晰。
-                // 搜索主页顶部有冻结的搜索框（自带背景），无需磨砂，强制隐藏；
-                // 搜索详情页（showContextHeader）仍保留磨砂以支持透明标题栏。
-                TopChromeOverlay(
-                    backdrop = backdrop.takeIf { uiState.blurEffect },
-                    headerHeight = if (showContextHeader) 44.dp else AppSpacing.sm,
-                    fadeExtension = if (showContextHeader) 96.dp else 56.dp,
-                    modifier = Modifier.align(Alignment.TopCenter),
-                    progress = topChromeProgress,
-                )
             }
         }
         }
@@ -590,6 +599,8 @@ fun MainScreen(
                     modifier = Modifier.align(Alignment.BottomCenter),
                     currentTab = currentTab,
                     isLoggedIn = uiState.isLoggedIn,
+                    backdrop = backdrop,
+                    isBlurEnabled = uiState.blurEffect,
                     onTabChange = onTabClick,
                 )
             }
@@ -805,17 +816,17 @@ private fun parseCookieJson(json: String): Map<String, String> {
     }.getOrElse { emptyMap() }
 }
 
-internal enum class ContextBackTarget(val usesContextHeader: Boolean) {
-    APPEARANCE_SETTINGS(true),
-    DOWNLOAD_SETTINGS(true),
-    FILE_TAG_SETTINGS(true),
-    ACCOUNT_SETTINGS(true),
-    PREVIEW_FEATURES(true),
-    ABOUT_SETTINGS(true),
-    QUALITY_UPGRADE(true),
-    SEARCH_DETAIL(true),
-    DISCOVER(true),
-    MY_SECTION(false),
+internal enum class ContextBackTarget {
+    APPEARANCE_SETTINGS,
+    DOWNLOAD_SETTINGS,
+    FILE_TAG_SETTINGS,
+    ACCOUNT_SETTINGS,
+    PREVIEW_FEATURES,
+    ABOUT_SETTINGS,
+    QUALITY_UPGRADE,
+    SEARCH_DETAIL,
+    DISCOVER,
+    MY_SECTION,
 }
 
 /** 设置二级页在磨砂标题栏里显示的名字 */
@@ -855,63 +866,6 @@ internal fun resolveContextBackTarget(
     else -> null
 }
 
-internal data class TopChromePageKey(
-    val tab: Tab,
-    val route: String,
-)
-
-internal fun resolveTopChromePageKey(
-    currentTab: Tab,
-    contextBackTarget: ContextBackTarget?,
-    discoverState: DiscoverUiState,
-    searchState: SearchUiState,
-    myState: MyUiState,
-): TopChromePageKey {
-    fun detailIdentity(detail: com.qing.hachimi.data.model.CollectionDetail?): String {
-        if (detail == null) return "none"
-        val fallbackTitle = if (detail.id == 0L) detail.title else ""
-        return "${detail.kind.name}:${detail.id}:$fallbackTitle"
-    }
-
-    val route = when (currentTab) {
-        Tab.DISCOVER -> listOf(
-            contextBackTarget?.name,
-            discoverState.sourceMode.name,
-            detailIdentity(discoverState.collectionDetail),
-            discoverState.activeArtist?.id,
-            discoverState.activePodcast?.id,
-            discoverState.sourceLabel,
-            discoverState.playlistTag,
-            discoverState.playlistCategory.name,
-            discoverState.artistArea.name,
-            discoverState.newSongsArea,
-            discoverState.artistDetailSection.name,
-        ).joinToString("|")
-        Tab.SEARCH -> listOf(
-            contextBackTarget?.name,
-            searchState.isDetailView,
-            detailIdentity(searchState.detailHeader),
-            searchState.searchCategory.name,
-        ).joinToString("|")
-        Tab.MY -> listOf(
-            contextBackTarget?.name,
-            myState.section.name,
-            myState.isPlaylistDetail,
-            if (myState.isPlaylistDetail) myState.playlistName else "",
-        ).joinToString("|")
-        Tab.SETTINGS -> contextBackTarget?.name.orEmpty()
-        Tab.DOWNLOADS -> currentTab.name
-    }
-    return TopChromePageKey(tab = currentTab, route = route)
-}
-
-internal fun calculateTopChromeScrollOffset(
-    currentOffset: Float,
-    consumedY: Float,
-): Float = (currentOffset - consumedY).coerceAtLeast(0f)
-
-
-
 @Composable
 private fun TabContent(
     currentTab: Tab,
@@ -924,6 +878,9 @@ private fun TabContent(
     upgradeViewModel: UpgradeViewModel,
     navBackStack: androidx.compose.runtime.snapshots.SnapshotStateList<NavKey>,
     searchNavStack: androidx.compose.runtime.snapshots.SnapshotStateList<NavKey>,
+    searchInputMode: InputMode,
+    searchInteraction: MutableInteractionSource,
+    searchBarBottomY: Int,
     onPopSettingsPage: () -> Unit,
     innerPadding: PaddingValues,
     onOpenDownloadedFile: (Long) -> Unit,
@@ -954,7 +911,6 @@ private fun TabContent(
     onImportClick: () -> Unit,
     onOpenStoragePermissionSettings: () -> Unit = {},
     sessionStartedAt: Long = 0L,
-    topChromeScrollOffset: MutableFloatState = mutableFloatStateOf(0f),
     isWideLayout: Boolean = false,
 ) {
     val horizontalDirection = if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1 else -1
@@ -962,26 +918,7 @@ private fun TabContent(
     val reduceMotion = rememberIsReduceMotionEnabled()
     val scrollToTopTrigger =
         if (uiState.scrollToTopTab == currentTab.name) uiState.scrollToTopTrigger else 0
-    // 捕获子级实际消费的滚动位移，累积为“距顶部距离”（px）：
-    // - 内容上移（查看后方内容）时 consumed.y 为负 → 偏移增大 → 磨砂渐入至满
-    // - 回滚时偏移减小，仅当接近顶部（偏移 < 标题区高度）才渐出，到顶为 0（取消）
-    // - 忽略 available.y，避免把列表边界上的未消费回弹计入偏移
-    val topChromeConnection = remember {
-        object : NestedScrollConnection {
-            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                if (consumed.y != 0f) {
-                    topChromeScrollOffset.floatValue =
-                        calculateTopChromeScrollOffset(topChromeScrollOffset.floatValue, consumed.y)
-                }
-                return Offset.Zero
-            }
-        }
-    }
-    Box(
-        Modifier
-            .fillMaxSize()
-            .nestedScroll(topChromeConnection),
-    ) {
+    Box(Modifier.fillMaxSize()) {
         AnimatedContent(
             targetState = currentTab,
         transitionSpec = {
@@ -1040,6 +977,9 @@ private fun TabContent(
                     downloadProgress = downloadProgress,
                     onBack = searchViewModel::goBack,
                     navStack = searchNavStack,
+                    inputMode = searchInputMode,
+                    searchInteraction = searchInteraction,
+                    topBarBottomY = searchBarBottomY,
                     artistDetailContent = {
                         val artistState by discoverViewModel.uiState.collectAsStateWithLifecycle()
                         ArtistDetailPage(
@@ -1054,12 +994,10 @@ private fun TabContent(
                             onSetSection = discoverViewModel::setArtistDetailSection,
                             onLoadMore = discoverViewModel::loadMoreArtistSection,
                             onRetry = { discoverViewModel.refreshCurrentSource() },
-                            innerPadding = stablePagePadding(innerPadding, contextPage = true),
+                            innerPadding = innerPadding,
                         )
                     },
-                    onSearchQueryChange = searchViewModel::updateSearchQuery,
                     onSearch = searchViewModel::search,
-                    onParseUrl = { searchViewModel.updatePlaylistUrl(it); searchViewModel.parseUrl() },
                     onToggleSelect = searchViewModel::toggleSongSelection,
                     onSelectAll = searchViewModel::toggleSelectAll,
                     onSetSearchCategory = searchViewModel::setSearchCategory,

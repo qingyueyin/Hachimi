@@ -107,15 +107,12 @@ fun DownloadsTab(
                 verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
             ) {
                 item(key = "heading") {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        ScreenHeading("下载")
-                        UnderlineTabsBar(
-                            tabs = listOf("进行中 ${activeTasks.size}", "已完成 ${completedTasks.size}"),
-                            selectedIndex = selectedView.ordinal,
-                            onSelect = { selectedView = DownloadView.entries[it] },
-                            modifier = Modifier.padding(top = AppSpacing.xs),
-                        )
-                    }
+                    UnderlineTabsBar(
+                        tabs = listOf("进行中 ${activeTasks.size}", "已完成 ${completedTasks.size}"),
+                        selectedIndex = selectedView.ordinal,
+                        onSelect = { selectedView = DownloadView.entries[it] },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
                 if (selectedView == DownloadView.ACTIVE) {
                     item(key = "summary:active") {

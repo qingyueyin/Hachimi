@@ -2,30 +2,29 @@ package com.qing.hachimi.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import com.qing.hachimi.ui.theme.AppSpacing
 import top.yukonga.miuix.kmp.basic.*
-import top.yukonga.miuix.kmp.blur.BlurColors
+import top.yukonga.miuix.kmp.blur.BlendColorEntry
+import top.yukonga.miuix.kmp.blur.BlurDefaults
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
-import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.textureBlur
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.basic.NavigationRail
 import top.yukonga.miuix.kmp.basic.NavigationRailItem
 import top.yukonga.miuix.kmp.basic.NavigationRailState
-import androidx.compose.ui.graphics.vector.ImageVector
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 主界面外壳：侧边导航栏、底部悬浮栏、顶部磨砂层
@@ -102,146 +101,116 @@ internal fun MainDockedNavigationBar(
     modifier: Modifier = Modifier,
     currentTab: Tab,
     isLoggedIn: Boolean,
+    backdrop: LayerBackdrop?,
+    isBlurEnabled: Boolean,
     onTabChange: (Tab) -> Unit,
 ) {
     val visibleTabs = visibleMainTabs(isLoggedIn)
-    NavigationBar(
-        modifier = modifier.fillMaxWidth(),
-        color = colorScheme.surface,
-    ) {
-        visibleTabs.forEach { tab ->
-            NavigationBarItem(
-                selected = tab == currentTab,
-                onClick = { onTabChange(tab) },
-                icon = tab.icon,
-                label = tab.label,
-            )
+    FrostedBar(backdrop = backdrop, blurEnabled = isBlurEnabled, modifier = modifier) {
+        NavigationBar(
+            modifier = Modifier.fillMaxWidth(),
+            // 底色交给 FrostedBar，磨砂才能透出来
+            color = Color.Transparent,
+        ) {
+            visibleTabs.forEach { tab ->
+                NavigationBarItem(
+                    selected = tab == currentTab,
+                    onClick = { onTabChange(tab) },
+                    icon = tab.icon,
+                    label = tab.label,
+                )
+            }
         }
     }
 }
 
+
+/** 顶栏返回按钮：SmallTopAppBar 的 navigationIcon 槽位 */
 @Composable
-internal fun PrimaryPageTopInset() {
-    TopChrome {
-        Column {
-            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-            Spacer(Modifier.height(AppSpacing.sm))
-        }
+internal fun TopBarBackButton(onClick: () -> Unit) {
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    IconButton(onClick = onClick) {
+        Icon(
+            imageVector = MiuixIcons.Regular.Back,
+            contentDescription = "返回",
+            modifier = Modifier.graphicsLayer { if (isRtl) scaleX = -1f },
+        )
     }
 }
 
 /**
- * 按页面类型给一个固定的顶部内边距。
- *
- * Scaffold 的 body 始终从窗口顶部开始，顶栏高度只通过 innerPadding.top 影响页面。
- * 如果一级页和二级页共用同一个 innerPadding，切页瞬间两边会一起被重新排版
- * （一级页 8dp、二级页 44dp，差 36dp）。每个页面按自己的类型取固定值后，
- * 转场过程中内容不再跟着顶栏跳动。
+ * 栏容器：开启模糊时整条栏用磨砂背景，内容自己保持透明。
+ * 关掉模糊时由这里画实色底，搜索框顶栏也能盖住下面的内容。
+ * 磨砂之上叠一层半透明 surface，压住背景里的花色，保证文字和图标看得清。
  */
 @Composable
-internal fun stablePagePadding(
-    base: PaddingValues,
-    contextPage: Boolean,
-): PaddingValues {
-    val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val top = statusBar + if (contextPage) 44.dp else AppSpacing.sm
-    val layoutDirection = LocalLayoutDirection.current
-    val start = base.calculateStartPadding(layoutDirection)
-    val end = base.calculateEndPadding(layoutDirection)
-    val bottom = base.calculateBottomPadding()
-    return remember(start, top, end, bottom) {
-        PaddingValues(start = start, top = top, end = end, bottom = bottom)
-    }
-}
-
-@Composable
-internal fun ContextPageHeader(
-    onBackClick: () -> Unit,
-    customTitle: String,
-    titleAlpha: () -> Float = { 1f },
-    actions: @Composable RowScope.() -> Unit = {},
-) {
-    TopChrome {
-        Column {
-            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-            SecondaryPageHeader(
-                title = customTitle,
-                onBack = onBackClick,
-                titleAlpha = titleAlpha,
-                actions = actions,
-            )
-        }
-    }
-}
-
-@Composable
-internal fun TopChrome(
+internal fun FrostedBar(
+    backdrop: LayerBackdrop?,
+    blurEnabled: Boolean,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxWidth()) {
+    Box(
+        modifier = modifier.then(
+            if (blurEnabled && backdrop != null) {
+                Modifier.textureBlur(
+                    backdrop = backdrop,
+                    shape = RectangleShape,
+                    // 和底栏同一个半径，保证上下两条栏的磨砂强度一致（单位是 dp，库内部自己换算像素）
+                    blurRadius = 25f,
+                    colors = BlurDefaults.blurColors(
+                        blendColors = listOf(
+                            BlendColorEntry(colorScheme.surface.copy(alpha = 0.6f)),
+                        ),
+                    ),
+                )
+            } else {
+                Modifier.background(colorScheme.surface)
+            },
+        ),
+    ) {
         content()
     }
 }
 
-/**
- * 顶部渐变模糊层。
- *
- * 覆盖在页面内容之上、标题栏之下，从状态栏一直向下延伸一段距离，
- * 让标题和从标题下滚过的内容都落在同一条模糊渐变上，过渡更自然。
- */
+/** 搜索页顶栏：搜索框直接占满整条栏 */
 @Composable
-internal fun TopChromeOverlay(
-    backdrop: LayerBackdrop?,
-    headerHeight: Dp,
-    fadeExtension: Dp,
+internal fun SearchTopBar(
+    url: String,
+    searchQuery: String,
+    inputMode: InputMode,
+    onInputModeChange: (InputMode) -> Unit,
+    onUrlChange: (String) -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+    onParse: () -> Unit,
+    onSearch: () -> Unit,
+    isLoading: Boolean,
+    isSearching: Boolean,
+    interactionSource: MutableInteractionSource,
     modifier: Modifier = Modifier,
-    progress: () -> Float = { 1f },
 ) {
-    val density = LocalDensity.current
-    val surface = colorScheme.surface
-    val bodyTint = surface.copy(alpha = if (backdrop != null) 0.28f else 0.78f)
-    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val solidHeight = statusBarHeight + headerHeight
-    val totalHeight = solidHeight + fadeExtension
-    val solidFraction = (solidHeight / totalHeight).coerceIn(0f, 1f)
-    // 标题区域保持不透，再向下平滑淡出，避免滚动时出现生硬截断
-    val chromeMask = Brush.verticalGradient(
-        0f to androidx.compose.ui.graphics.Color.Black,
-        solidFraction to androidx.compose.ui.graphics.Color.Black,
-        1f to androidx.compose.ui.graphics.Color.Transparent,
-    )
-    val chromeTint = Brush.verticalGradient(
-        0f to bodyTint,
-        solidFraction to bodyTint,
-        1f to surface.copy(alpha = 0f),
-    )
-
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(totalHeight)
-            .graphicsLayer { alpha = progress() },
+            .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+            // 搜索页栏比普通顶栏高：40dp 搜索框 + 上下各 16dp，跟改之前的搜索区一致
+            .height(72.dp)
+            .padding(horizontal = 12.dp, vertical = 16.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        if (backdrop != null) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .textureBlur(
-                        backdrop = backdrop,
-                        shape = RectangleShape,
-                        blurRadius = with(density) { 24.dp.toPx() },
-                        colors = BlurColors(saturation = 1.08f),
-                        contentBlendMode = BlendMode.DstIn,
-                    )
-                    .background(chromeMask),
-            )
-        }
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .drawBehind {
-                    drawRect(brush = chromeTint, size = size)
-                },
+        SearchInputBar(
+            url = url,
+            searchQuery = searchQuery,
+            inputMode = inputMode,
+            onInputModeChange = onInputModeChange,
+            onUrlChange = onUrlChange,
+            onSearchQueryChange = onSearchQueryChange,
+            onParse = onParse,
+            onSearch = onSearch,
+            isLoading = isLoading,
+            isSearching = isSearching,
+            interactionSource = interactionSource,
+            insideMargin = DpSize(16.dp, 0.dp),
         )
     }
 }
