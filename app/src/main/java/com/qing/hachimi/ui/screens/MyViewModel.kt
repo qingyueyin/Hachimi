@@ -625,12 +625,18 @@ class MyViewModel(
     /** 收藏专辑详情（进入歌曲列表） */
     fun loadCollectedAlbumSongs(album: com.qing.hachimi.data.model.AlbumResult) {
         AppLogger.info("[MyVM] loadCollectedAlbumSongs: id=${album.id} name=${album.name}")
-        _uiState.value = _uiState.value.copy(isLoading = true, statusMessage = null)
+        _uiState.value = _uiState.value.copy(
+            isLoading = true,
+            statusMessage = null,
+            isPlaylistDetail = true,
+            playlistName = album.name,
+        )
         viewModelScope.launch {
             repository.getAlbumDetail(album.id.toString()).fold(
                 onSuccess = { content ->
                     _uiState.value = _uiState.value.copy(
                         songs = content.songs,
+                        playlistDetail = content.detail,
                         isLoading = false,
                         selectedIds = emptySet(),
                         playlistName = content.detail.title,
@@ -650,12 +656,25 @@ class MyViewModel(
     /** 收藏艺人详情（热门歌曲 50 首） */
     fun loadCollectedArtistSongs(artist: com.qing.hachimi.data.model.ArtistResult) {
         AppLogger.info("[MyVM] loadCollectedArtistSongs: id=${artist.id} name=${artist.name}")
-        _uiState.value = _uiState.value.copy(isLoading = true, statusMessage = null)
+        _uiState.value = _uiState.value.copy(
+            isLoading = true,
+            statusMessage = null,
+            isPlaylistDetail = true,
+            playlistName = artist.name,
+        )
         viewModelScope.launch {
             repository.getArtistTopSongs(artist.id).fold(
                 onSuccess = { songs ->
                     _uiState.value = _uiState.value.copy(
                         songs = songs,
+                        playlistDetail = com.qing.hachimi.data.model.CollectionDetail(
+                            kind = com.qing.hachimi.data.model.CollectionKind.SONG,
+                            id = artist.id,
+                            title = artist.name,
+                            subtitle = "热门歌曲",
+                            coverUrl = artist.avatarUrl,
+                            expectedItemCount = songs.size,
+                        ),
                         isLoading = false,
                         selectedIds = emptySet(),
                         playlistName = artist.name,

@@ -155,6 +155,15 @@ fun MyTab(
         navStack.add(NavKey2.MyPlaylistDetail(playlist.id, playlist.name))
         onPlaylistClick(playlist)
     }
+    // 收藏专辑/艺人同样进详情层，和歌单共用一个页面
+    val openAlbumNav: (AlbumResult) -> Unit = { album ->
+        navStack.add(NavKey2.MyPlaylistDetail(album.id, album.name))
+        onAlbumClick(album)
+    }
+    val openArtistNav: (ArtistResult) -> Unit = { artist ->
+        navStack.add(NavKey2.MyPlaylistDetail(artist.id, artist.name))
+        onArtistClick(artist)
+    }
     val backNav: () -> Unit = {
         if (navStack.size > 1) navStack.removeAt(navStack.lastIndex)
         onBack()
@@ -195,8 +204,8 @@ fun MyTab(
                     onSetFootprintTab = onSetFootprintTab,
                     onLoadMoreAlbums = onLoadMoreAlbums,
                     onLoadMoreArtists = onLoadMoreArtists,
-                    onAlbumClick = onAlbumClick,
-                    onArtistClick = onArtistClick,
+                    onAlbumClick = openAlbumNav,
+                    onArtistClick = openArtistNav,
                     innerPadding = contextPadding,
                     twoColumn = twoColumnList,
                 )
