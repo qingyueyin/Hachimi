@@ -127,7 +127,7 @@ class SearchApi(private val api: NeteaseApi) {
                 creator = playlist.optJSONObject("creator")?.optString("nickname").orEmpty(),
                 trackCount = playlist.optInt("trackCount"),
                 playCount = playlist.optLong("playCount"),
-                description = playlist.optString("description"),
+                description = playlist.optString("description").takeUnless { it == "null" }.orEmpty(),
                 tags = playlist.optJSONArray("tags")?.let { tags ->
                     (0 until tags.length()).mapNotNull { index ->
                         tags.optString(index).takeIf(String::isNotBlank)
@@ -166,7 +166,7 @@ class SearchApi(private val api: NeteaseApi) {
                 category = podcast.optString("category"),
                 programCount = podcast.optInt("programCount"),
                 playCount = podcast.optLong("playCount"),
-                description = podcast.optString("desc"),
+                description = podcast.optString("desc").takeUnless { it == "null" }.orEmpty(),
                 createTime = podcast.optLong("createTime"),
                 updateTime = podcast.optLong("lastProgramCreateTime").takeIf { it > 0 }
                     ?: podcast.optLong("updateTime"),

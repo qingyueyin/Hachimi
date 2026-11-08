@@ -55,7 +55,8 @@ class AlbumApi(private val api: NeteaseApi) {
                 coverUrl = album.optString("picUrl"),
                 artist = artist,
                 songs = songList,
-                description = album.optString("description").ifBlank { album.optString("briefDesc") },
+                description = album.optString("description").takeUnless { it == "null" }.orEmpty()
+                    .ifBlank { album.optString("briefDesc").takeUnless { it == "null" }.orEmpty() },
                 publishTime = album.optLong("publishTime"),
                 company = album.optString("company"),
                 subtype = album.optString("subType").ifBlank { album.optString("type") },

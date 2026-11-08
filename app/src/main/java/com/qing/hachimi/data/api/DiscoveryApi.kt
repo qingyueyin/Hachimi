@@ -72,7 +72,8 @@ class DiscoveryApi(private val api: NeteaseApi) {
         creator = item.optJSONObject("creator")?.optString("nickname").orEmpty(),
         trackCount = item.optInt("trackCount"),
         playCount = item.optLong("playCount"),
-        description = item.optString("copywriter").ifBlank { item.optString("description") },
+        description = item.optString("copywriter").takeUnless { it == "null" }.orEmpty()
+            .ifBlank { item.optString("description").takeUnless { it == "null" }.orEmpty() },
         tags = item.optJSONArray("tags")?.let { tags ->
             (0 until tags.length()).mapNotNull { index -> tags.optString(index).takeIf(String::isNotBlank) }
         }.orEmpty(),
@@ -88,7 +89,8 @@ class DiscoveryApi(private val api: NeteaseApi) {
         category = item.optString("category"),
         programCount = item.optInt("programCount"),
         playCount = item.optLong("playCount"),
-        description = item.optString("desc").ifBlank { item.optString("copywriter") },
+        description = item.optString("desc").takeUnless { it == "null" }.orEmpty()
+            .ifBlank { item.optString("copywriter").takeUnless { it == "null" }.orEmpty() },
         createTime = item.optLong("createTime"),
         updateTime = item.optLong("lastProgramCreateTime").takeIf { it > 0 } ?: item.optLong("updateTime"),
     )

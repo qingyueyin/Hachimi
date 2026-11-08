@@ -70,7 +70,7 @@ class PlaylistApi(private val api: NeteaseApi) {
                 creator = pl.optJSONObject("creator")?.optString("nickname") ?: "",
                 trackCount = pl.optInt("trackCount"),
                 songs = songs,
-                description = pl.optString("description"),
+                description = pl.optString("description").takeUnless { it == "null" }.orEmpty(),
                 playCount = pl.optLong("playCount"),
                 tags = pl.optJSONArray("tags")?.let { tags ->
                     (0 until tags.length()).mapNotNull { index ->
@@ -115,9 +115,10 @@ class PlaylistApi(private val api: NeteaseApi) {
     private fun fetchSongsBatch(batch: List<Long>, cookies: Map<String, String>): List<SongInfo> {
         return try {
             val cArr = JSONArray(batch.map { JSONObject(mapOf("id" to it, "v" to 0)) })
+            // 接口要求 c 是 JSON 字符串，直接传数组会返回 400
             val raw = api.eapiPost(
                 "v3/song/detail",
-                "{\"c\":${cArr.toString()}}",
+                JSONObject().put("c", cArr.toString()).toString(),
                 cookies,
                 callTimeoutMs = 15_000L,
             )
