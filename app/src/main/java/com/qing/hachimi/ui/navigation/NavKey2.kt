@@ -33,9 +33,17 @@ sealed class NavKey2 : NavKey {
     @Serializable
     data object DiscoverCategory : NavKey2()
 
-    /** 详情页：歌单/榜单/专辑/歌手，内容同样由 uiState 决定 */
+    /**
+     * 详情页：歌单/榜单/专辑/歌手，内容同样由 uiState 决定。
+     *
+     * [depth] 是它在发现页导航栈里的位置（0 起），只用来区分同一条栈上的多个详情页：
+     * 歌手 → 专辑这样的二级详情会连着压两层，而 NavDisplay 要求同一栈上每个 entry
+     * 的 contentKey 唯一，两个 DiscoverSongList 挨在一起会直接抛
+     * 「Duplicate contentKey on the back stack」把界面打崩。
+     * 只用来去重，所以不能当页面身份用（数据一变就会被重建）。
+     */
     @Serializable
-    data object DiscoverSongList : NavKey2()
+    data class DiscoverSongList(val depth: Int = 0) : NavKey2()
 
     /** 搜索页里的歌手详情：歌手由 SearchViewModel 当前状态决定 */
     @Serializable

@@ -35,7 +35,7 @@ class NavStackSyncTest {
         val current = stackOf(
             NavKey2.DiscoverHome,
             NavKey2.DiscoverCategory,
-            NavKey2.DiscoverSongList,
+            NavKey2.DiscoverSongList(2),
         )
 
         syncNavStack(current, listOf(NavKey2.DiscoverHome, NavKey2.DiscoverCategory))
@@ -76,7 +76,7 @@ class NavStackSyncTest {
         )
         val target = listOf(
             NavKey2.DiscoverHome,
-            NavKey2.DiscoverSongList,
+            NavKey2.DiscoverSongList(1),
         )
 
         syncNavStack(current, target)
@@ -95,6 +95,37 @@ class NavStackSyncTest {
             DiscoverLevel.DETAIL.toNavKey(first),
             DiscoverLevel.DETAIL.toNavKey(second),
         )
+    }
+
+    @Test
+    fun `nested detail pages never share a content key`() {
+        // 歌手页里点专辑会连着压两层详情。NavDisplay 按 contentKey 判重，
+        // 两个详情 entry 的 key 相同会直接抛 Duplicate contentKey 崩掉。
+        val state = DiscoverUiState(playlistName = "某歌手")
+        val stack = listOf(DiscoverLevel.HOME, DiscoverLevel.CATEGORY, DiscoverLevel.DETAIL, DiscoverLevel.DETAIL)
+            .mapIndexed { depth, level -> level.toNavKey(state, depth) }
+
+        val keys = stack
+        assertEquals(keys.size, keys.distinct().size)
+    }
+
+    @Test
+    fun `nested detail pages stay in sync when the inner page changes`() {
+        // 歌手 → 专辑：只替换最后一层（新专辑替换旧专辑），不能因为 key 相同就漏掉更新
+        val state = DiscoverUiState(playlistName = "旧专辑")
+        val current = stackOf(
+            DiscoverLevel.HOME.toNavKey(state, 0),
+            DiscoverLevel.DETAIL.toNavKey(state, 1),
+            DiscoverLevel.DETAIL.toNavKey(state, 2),
+        )
+        val target = listOf(
+            DiscoverLevel.HOME.toNavKey(state, 0),
+            DiscoverLevel.DETAIL.toNavKey(state, 1),
+        )
+
+        syncNavStack(current, target)
+
+        assertEquals(target, current.snapshot())
     }
 
     @Test

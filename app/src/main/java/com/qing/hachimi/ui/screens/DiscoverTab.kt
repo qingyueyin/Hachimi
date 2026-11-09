@@ -269,8 +269,8 @@ fun DiscoverTab(
 internal fun DiscoverLevel.toNavKey(state: DiscoverUiState, depth: Int = 0): NavKey = when (this) {
     DiscoverLevel.HOME -> NavKey2.DiscoverHome
     DiscoverLevel.CATEGORY -> NavKey2.DiscoverCategory
-    // depth 只用于保证同一栈里两个详情 entry 的 key 不同（标题不参与显示）
-    DiscoverLevel.DETAIL -> NavKey2.DiscoverSongList
+    // depth 只用于保证同一栈里两个详情 entry 的 contentKey 不同（标题不参与显示）
+    DiscoverLevel.DETAIL -> NavKey2.DiscoverSongList(depth)
 }
 
 @OptIn(ExperimentalScrollBarApi::class)
