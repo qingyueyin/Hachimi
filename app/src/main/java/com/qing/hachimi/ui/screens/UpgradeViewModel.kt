@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qing.hachimi.data.local.CookieManager
 import com.qing.hachimi.data.model.*
+import com.qing.hachimi.service.UpgradeResult
 import com.qing.hachimi.service.UpgradeService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +44,8 @@ data class UpgradeUiState(
     val selectedUpgradeMode: UpgradeMode = UpgradeMode.AUTO_REPLACE,
     val selectedSongs: Set<String> = emptySet(),
     val upgradeCandidates: List<UpgradeCandidate> = emptyList(),
+    /** 升级失败明细，直接给用户看哪首失败、为什么 */
+    val upgradeFailures: List<String> = emptyList(),
     val expandedFolders: Set<String> = emptySet(),
     val statusMessage: String? = null,
     val error: String? = null
@@ -56,6 +59,7 @@ class UpgradeViewModel(
     private val _uiState = MutableStateFlow(UpgradeUiState())
     val uiState: StateFlow<UpgradeUiState> = _uiState.asStateFlow()
     private var operationJob: Job? = null
+    private var scanJob: Job? = null
 
     fun addFolder(folder: File) {
         if (_uiState.value.isScanning || _uiState.value.isSearching || _uiState.value.isUpgrading) return
@@ -85,10 +89,6 @@ class UpgradeViewModel(
     }
 
     fun startScan() {
-        startScan(completionStatus = null)
-    }
-
-    private fun startScan(completionStatus: String?) {
         if (_uiState.value.isScanning || _uiState.value.isSearching || _uiState.value.isUpgrading) return
         val folders = _uiState.value.selectedFolders
         if (folders.isEmpty()) {
@@ -96,7 +96,7 @@ class UpgradeViewModel(
             return
         }
 
-        viewModelScope.launch(Dispatchers.Main.immediate) {
+        scanJob = viewModelScope.launch(Dispatchers.Main.immediate) {
             _uiState.value = _uiState.value.copy(
                 isScanning = true,
                 scanProgress = ScanProgress(0, folders.size, ""),
@@ -113,12 +113,11 @@ class UpgradeViewModel(
                         scanProgress = ScanProgress(current, total, folderName)
                     )
                 }, onSongs = { folder, songs ->
-                    // 回调在 IO 线程，改状态统一回主线程；顺序由 IO 侧串行保证
-                    viewModelScope.launch(Dispatchers.Main.immediate) {
-                        _uiState.value = _uiState.value.copy(
-                            scannedFolders = _uiState.value.scannedFolders.appendSongs(folder, songs)
-                        )
-                    }
+                    // 回调是 suspend 的，在扫描协程里顺序执行；StateFlow 赋值线程安全，
+                    // 不需要再切主线程，也就不会出现「界面更新排在扫描结束之后」导致歌曲重复
+                    _uiState.value = _uiState.value.copy(
+                        scannedFolders = _uiState.value.scannedFolders.appendSongs(folder, songs)
+                    )
                 })
 
                 val totalSongs = scannedFolders.sumOf { it.songs.size }
@@ -127,8 +126,11 @@ class UpgradeViewModel(
                     isScanning = false,
                     scanProgress = null,
                     expandedFolders = emptySet(),
-                    statusMessage = completionStatus ?: "扫描完成，找到 $totalSongs 首歌曲"
+                    statusMessage = "扫描完成，找到 $totalSongs 首歌曲"
                 )
+            } catch (e: CancellationException) {
+                // 取消是用户主动操作，状态由 cancelScan 负责，这里不再改
+                throw e
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isScanning = false,
@@ -227,11 +229,16 @@ class UpgradeViewModel(
                 isUpgrading = true,
                 error = null,
                 statusMessage = null,
+                upgradeFailures = emptyList(),
             )
 
             try {
                 var successCount = 0
                 var failureCount = 0
+                // 升级成功的歌，用于结束后就地更新列表，不再整盘重扫
+                val succeeded = mutableListOf<Pair<SongInfo, UpgradeResult>>()
+                // 失败明细当场收集：批量升级里某首失败不影响其他歌
+                val failures = mutableListOf<String>()
                 candidates.forEachIndexed { index, candidate ->
                     val song = candidate.song
                     val onlineVersion = candidate.onlineVersion
@@ -250,7 +257,13 @@ class UpgradeViewModel(
                         _uiState.value.selectedUpgradeMode,
                         cookies
                     )
-                    if (result.success) successCount++ else failureCount++
+                    if (result.success) {
+                        successCount++
+                        succeeded.add(song to result)
+                    } else {
+                        failureCount++
+                        failures += "${song.name}：${result.error ?: "未知原因"}"
+                    }
                 }
 
                 val completionStatus = when {
@@ -258,14 +271,14 @@ class UpgradeViewModel(
                     successCount == 0 -> "升级失败，共 $failureCount 首歌曲未完成"
                     else -> "升级完成，成功 $successCount 首，失败 $failureCount 首"
                 }
+                markUpgraded(succeeded)
+
                 _uiState.value = _uiState.value.copy(
                     isUpgrading = false,
                     upgradeProgress = null,
-                    statusMessage = null,
+                    statusMessage = completionStatus,
+                    upgradeFailures = failures,
                 )
-
-                startScan(completionStatus)
-
             } catch (e: CancellationException) {
                 _uiState.value = _uiState.value.copy(
                     isUpgrading = false,
@@ -288,16 +301,49 @@ class UpgradeViewModel(
         }
     }
 
+    /**
+     * 升级成功后直接在列表里换掉对应歌曲行。
+     * 原来结束时会重扫全部文件夹：几百首歌又分析一遍、界面整个闪一次，
+     * 而且重扫出来的正是刚换好的新文件，重复点检查反而查不出东西了。
+     */
+    private fun markUpgraded(succeeded: List<Pair<SongInfo, UpgradeResult>>) {
+        if (succeeded.isEmpty()) return
+        val upgrades = succeeded.mapNotNull { (song, result) ->
+            result.upgradedFile?.let { UpgradedSong(song, it, result.upgradedQuality) }
+        }
+        if (upgrades.isEmpty()) return
+        val state = _uiState.value
+        val (folders, selected) = state.scannedFolders.applyUpgrades(upgrades, state.selectedSongs)
+        _uiState.value = state.copy(
+            scannedFolders = folders,
+            selectedSongs = selected,
+            // 升级完的这批已经不在“可升级”里了，清掉免得重复点
+            upgradeCandidates = emptyList(),
+        )
+    }
+
     fun cancelUpgrade() {
         val wasSearching = _uiState.value.isSearching
         operationJob?.cancel()
         operationJob = null
+        // 检查/升级被中途取消时也要清掉的进度字段，否则按钮会一直显示“取消检查”
         _uiState.value = _uiState.value.copy(
             isUpgrading = false,
             isSearching = false,
             searchProgress = null,
             upgradeProgress = null,
             statusMessage = if (wasSearching) "检查已取消" else "升级已取消"
+        )
+    }
+
+    fun cancelScan() {
+        if (!_uiState.value.isScanning) return
+        scanJob?.cancel()
+        // 扫描已经显示出来的歌曲保留，避免一次误触把结果全清掉
+        _uiState.value = _uiState.value.copy(
+            isScanning = false,
+            scanProgress = null,
+            statusMessage = "扫描已取消，已找到 ${_uiState.value.scannedFolders.sumOf { it.songs.size }} 首",
         )
     }
 

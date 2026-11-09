@@ -51,6 +51,44 @@ fun List<ScannedFolder>.appendSongs(folder: File, songs: List<SongInfo>): List<S
     }
 }
 
+/** 升级成功的单条结果，用于就地更新列表 */
+data class UpgradedSong(
+    val original: SongInfo,
+    val newFile: File,
+    val newQuality: AudioQualityInfo?
+)
+
+/**
+ * 升级成功后把列表里的旧条目替换成新文件，并同步选中路径。
+ *
+ * 不更新 [SongInfo.qualityInfo] 的话，列表还显示升级前的码率，
+ * 再点一次检查会重复报「可升级」，点升级又会被服务端拒绝。
+ */
+fun List<ScannedFolder>.applyUpgrades(
+    upgrades: List<UpgradedSong>,
+    selected: Set<String>
+): Pair<List<ScannedFolder>, Set<String>> {
+    if (upgrades.isEmpty()) return this to selected
+    val byOldPath = upgrades.associateBy { it.original.localFile.absolutePath }
+    val folders = map { folder ->
+        folder.copy(
+            songs = folder.songs.map { song ->
+                val upgrade = byOldPath[song.localFile.absolutePath] ?: return@map song
+                song.copy(
+                    name = upgrade.newFile.nameWithoutExtension.substringBefore(" - "),
+                    album = upgrade.newFile.parentFile?.name ?: song.album,
+                    localFile = upgrade.newFile,
+                    qualityInfo = upgrade.newQuality ?: song.qualityInfo,
+                )
+            }
+        )
+    }
+    val newSelected = selected
+        .map { path -> byOldPath[path]?.newFile?.absolutePath ?: path }
+        .toSet()
+    return folders to newSelected
+}
+
 data class UpgradeProgress(
     val current: Int,
     val total: Int,

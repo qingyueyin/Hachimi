@@ -221,6 +221,7 @@ internal fun SettingsNavHost(
                     onAddFolder = onPickMusicFolder,
                     onRemoveFolder = upgradeViewModel::removeFolder,
                     onStartScan = upgradeViewModel::startScan,
+                    onCancelScan = upgradeViewModel::cancelScan,
                     onSelectUpgradeMode = upgradeViewModel::selectUpgradeMode,
                     onToggleSongSelection = upgradeViewModel::toggleSongSelection,
                     onSelectAll = upgradeViewModel::selectAllSongs,

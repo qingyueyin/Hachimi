@@ -11,7 +11,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.supervisorScope
@@ -54,18 +56,24 @@ class UpgradeService(
 
     /**
      * 扫描文件夹并逐首回调结果，方便界面边扫边显示。
-     * onSongs 在 IO 线程调用，调用方自行切回主线程更新界面。
+     * onSongs 在 IO 线程调用，但它是 suspend 的：回调里直接改状态即可，
+     * 调用方不用再起协程，也就不会出现「界面更新排在扫描结束之后」的乱序。
      */
     suspend fun scanFoldersIncremental(
         folders: List<File>,
         onProgress: (current: Int, total: Int, folderName: String) -> Unit = { _, _, _ -> },
-        onSongs: (folder: File, songs: List<SongInfo>) -> Unit = { _, _ -> }
+        onSongs: suspend (folder: File, songs: List<SongInfo>) -> Unit = { _, _ -> }
     ): List<ScannedFolder> = withContext(Dispatchers.IO) {
+        // 历史记录只读一次：isUpgraded 每次都重新解析整份 JSON，500 首会解析 500 遍
+        val upgradedPaths = historyManager.getRecords()
+            .filter { it.status == UpgradeStatus.COMPLETED }
+            .map { it.originalFile.absolutePath }
+            .toSet()
         folders.mapIndexed { index, folder ->
             onProgress(index + 1, folders.size, folder.name)
             val songs = scanFolder(folder) { batch -> onSongs(folder, batch) }
             val upgradeableCount = songs.count { song ->
-                !historyManager.isUpgraded(song.localFile)
+                song.localFile.absolutePath !in upgradedPaths
             }
 
             ScannedFolder(
@@ -80,12 +88,14 @@ class UpgradeService(
      * @param onBatch 每分析完一首就追加到批缓冲，缓冲满 [EMIT_EVERY] 条回调一次；
      *                500 首的歌单如果只在结束后一次性交给界面，会连续构建几百行内容、直接卡住主线程。
      */
-    private fun scanFolder(folder: File, onBatch: (List<SongInfo>) -> Unit = {}): List<SongInfo> {
+    private suspend fun scanFolder(folder: File, onBatch: suspend (List<SongInfo>) -> Unit = {}): List<SongInfo> {
         if (!folder.exists() || !folder.isDirectory) {
             return emptyList()
         }
 
         val pending = mutableListOf<SongInfo>()
+        // 序列保持惰性：for 循环每取一首才分析一首，取消扫描能立刻停下；
+        // 先 toList() 会一口气把整盘分析完，中途取消要等全部分析结束才生效
         val parsed = folder.walkTopDown()
             .filter { it.isFile && isAudioFile(it) }
             .map { file ->
@@ -111,10 +121,10 @@ class UpgradeService(
                 }
             }
             .filterNotNull()
-            .toList()
 
         val songs = mutableListOf<SongInfo>()
         for (song in parsed) {
+            currentCoroutineContext().ensureActive()
             songs += song
             pending += song
             if (pending.size >= EMIT_EVERY) {
@@ -269,7 +279,8 @@ class UpgradeService(
                         success = true,
                         error = null,
                         originalFile = song.localFile,
-                        upgradedFile = upgradedFile
+                        upgradedFile = upgradedFile,
+                        upgradedQuality = downloadedQuality
                     )
                 }
                 UpgradeMode.KEEP_ORIGINAL -> {
@@ -292,7 +303,8 @@ class UpgradeService(
                         success = true,
                         error = null,
                         originalFile = song.localFile,
-                        upgradedFile = upgradedFile
+                        upgradedFile = upgradedFile,
+                        upgradedQuality = downloadedQuality
                     )
                 }
             }
@@ -426,5 +438,7 @@ data class UpgradeResult(
     val success: Boolean,
     val error: String?,
     val originalFile: File,
-    val upgradedFile: File?
+    val upgradedFile: File?,
+    /** 新文件的真实音质；界面要拿它刷新这一行，否则还显示升级前的旧音质 */
+    val upgradedQuality: AudioQualityInfo? = null
 )

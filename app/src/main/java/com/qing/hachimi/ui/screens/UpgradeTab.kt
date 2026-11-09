@@ -33,6 +33,7 @@ fun UpgradeTab(
     onAddFolder: () -> Unit,
     onRemoveFolder: (File) -> Unit,
     onStartScan: () -> Unit,
+    onCancelScan: () -> Unit,
     onSelectUpgradeMode: (UpgradeMode) -> Unit,
     onToggleSongSelection: (String) -> Unit,
     onSelectAll: () -> Unit,
@@ -123,8 +124,12 @@ fun UpgradeTab(
 
             if (uiState.selectedFolders.isNotEmpty()) {
                 item {
-                    Button(onClick = onStartScan, enabled = !uiState.isScanning, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (uiState.isScanning) "扫描中..." else "扫描")
+                    Button(
+                        onClick = if (uiState.isScanning) onCancelScan else onStartScan,
+                        enabled = !uiState.isSearching && !uiState.isUpgrading,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (uiState.isScanning) "取消扫描" else "扫描")
                     }
                 }
             }
@@ -174,19 +179,15 @@ fun UpgradeTab(
                 item { ProgressCard("检查在线音质", uiState.searchProgress.current.toFloat() / uiState.searchProgress.total.toFloat(), uiState.searchProgress.currentSong) }
             }
 
-            if (uiState.upgradeCandidates.isNotEmpty()) {
-                item { UpgradeCandidatesSection(uiState.upgradeCandidates) }
-            }
-
             if (uiState.upgradeCandidates.isNotEmpty() && !uiState.isSearching) {
                 item {
                     val modes = listOf(UpgradeMode.AUTO_REPLACE, UpgradeMode.KEEP_ORIGINAL)
                     OverlayDropdownPreference(
                         title = "升级方式",
                         summary = if (uiState.selectedUpgradeMode == UpgradeMode.AUTO_REPLACE) {
-                            "替换原文件并保留备份"
+                            "替换原文件，旧文件改名成 .backup 保留"
                         } else {
-                            "新文件保存在原文件旁"
+                            "原文件不动，新文件带音质后缀放在同一文件夹"
                         },
                         items = listOf("自动替换", "保留原文件"),
                         selectedIndex = modes.indexOf(uiState.selectedUpgradeMode).coerceAtLeast(0),
@@ -196,8 +197,30 @@ fun UpgradeTab(
                 }
             }
 
+            if (uiState.upgradeCandidates.isNotEmpty()) {
+                item { UpgradeCandidatesSection(uiState.upgradeCandidates) }
+            }
+
             if (uiState.upgradeProgress != null) {
                 item { ProgressCard("升级中", uiState.upgradeProgress.current.toFloat() / uiState.upgradeProgress.total.toFloat(), uiState.upgradeProgress.currentSong) }
+            }
+
+            if (uiState.upgradeFailures.isNotEmpty()) {
+                item {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(AppSpacing.md)) {
+                            Text("升级失败", style = MiuixTheme.textStyles.headline2)
+                            Spacer(Modifier.height(AppSpacing.sm))
+                            // 失败明细最多列 10 条，再多的用一行汇总，避免把页面撑爆
+                            uiState.upgradeFailures.take(10).forEach { line ->
+                                Text(line, style = MiuixTheme.textStyles.body2, color = colorScheme.error, modifier = Modifier.padding(vertical = AppSpacing.xs))
+                            }
+                            if (uiState.upgradeFailures.size > 10) {
+                                Text("另有 ${uiState.upgradeFailures.size - 10} 首失败", style = MiuixTheme.textStyles.body2, color = colorScheme.onSurfaceVariantActions)
+                            }
+                        }
+                    }
+                }
             }
 
             if (uiState.statusMessage != null) {
