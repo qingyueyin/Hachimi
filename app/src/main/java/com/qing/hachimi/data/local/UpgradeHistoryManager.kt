@@ -2,6 +2,7 @@ package com.qing.hachimi.data.local
 
 import android.content.Context
 import androidx.core.content.edit
+import com.qing.hachimi.data.model.UpgradeMode
 import com.qing.hachimi.data.model.UpgradeStatus
 import org.json.JSONArray
 import org.json.JSONObject
@@ -15,7 +16,9 @@ class UpgradeHistoryManager(private val context: Context) {
         val originalQuality: String,
         val upgradedQuality: String,
         val timestamp: Long,
-        val status: UpgradeStatus
+        val status: UpgradeStatus,
+        /** 升级方式；老记录没有这个字段，按自动替换处理 */
+        val mode: UpgradeMode = UpgradeMode.AUTO_REPLACE
     )
 
     private val prefs = context.getSharedPreferences("upgrade_history", Context.MODE_PRIVATE)
@@ -40,7 +43,9 @@ class UpgradeHistoryManager(private val context: Context) {
                     originalQuality = obj.getString("originalQuality"),
                     upgradedQuality = obj.getString("upgradedQuality"),
                     timestamp = obj.getLong("timestamp"),
-                    status = UpgradeStatus.valueOf(obj.getString("status"))
+                    status = UpgradeStatus.valueOf(obj.getString("status")),
+                    mode = runCatching { UpgradeMode.valueOf(obj.optString("mode")) }
+                        .getOrDefault(UpgradeMode.AUTO_REPLACE)
                 )
             )
         }
@@ -58,12 +63,22 @@ class UpgradeHistoryManager(private val context: Context) {
         prefs.edit { remove("records") }
     }
 
-    fun isUpgraded(file: File): Boolean {
-        return getRecords().any {
-            it.originalFile.absolutePath == file.absolutePath &&
-                it.status == UpgradeStatus.COMPLETED
+    /**
+     * 已经升级过的文件路径。
+     * 替换模式下原文件被改名成 .backup，实际在用的是新文件；
+     * 保留模式下原文件还在，它才是「被升级过」的那一首。
+     */
+    fun upgradedFilePaths(): Set<String> = getRecords()
+        .filter { it.status == UpgradeStatus.COMPLETED }
+        .map {
+            when (it.mode) {
+                UpgradeMode.AUTO_REPLACE -> it.upgradedFile.absolutePath
+                else -> it.originalFile.absolutePath
+            }
         }
-    }
+        .toSet()
+
+    fun isUpgraded(file: File): Boolean = file.absolutePath in upgradedFilePaths()
 
     private fun saveRecords(records: List<UpgradeRecord>) {
         val jsonArray = JSONArray()
@@ -75,6 +90,7 @@ class UpgradeHistoryManager(private val context: Context) {
                 put("upgradedQuality", record.upgradedQuality)
                 put("timestamp", record.timestamp)
                 put("status", record.status.name)
+                put("mode", record.mode.name)
             }
             jsonArray.put(obj)
         }

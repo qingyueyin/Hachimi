@@ -2,6 +2,7 @@ package com.qing.hachimi.data.local
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.qing.hachimi.data.model.UpgradeMode
 import com.qing.hachimi.data.model.UpgradeStatus
 import org.junit.Test
 import org.junit.Assert.*
@@ -64,7 +65,40 @@ class UpgradeHistoryManagerTest {
 
         doReturn(listOf(record)).`when`(manager).getRecords()
 
+        // 自动替换模式下原文件被改名备份，实际在用的是新文件
+        assertTrue(manager.isUpgraded(File("/path/to/upgraded.flac")))
+        assertFalse(manager.isUpgraded(File("/path/to/original.mp3")))
+    }
+
+    @Test
+    fun `test isUpgraded keeps the original file for keep-original mode`() {
+        val mockContext = mock(Context::class.java)
+        val mockPrefs = mock(SharedPreferences::class.java)
+        val mockEditor = mock(SharedPreferences.Editor::class.java)
+
+        `when`(mockContext.getSharedPreferences("upgrade_history", Context.MODE_PRIVATE))
+            .thenReturn(mockPrefs)
+        `when`(mockPrefs.getString("records", "[]")).thenReturn("[]")
+        `when`(mockPrefs.edit()).thenReturn(mockEditor)
+        `when`(mockEditor.putString(ArgumentMatchers.any(), ArgumentMatchers.any())).thenReturn(mockEditor)
+
+        val manager = spy(UpgradeHistoryManager(mockContext))
+
+        val record = UpgradeHistoryManager.UpgradeRecord(
+            originalFile = File("/path/to/original.mp3"),
+            upgradedFile = File("/path/to/upgraded.flac"),
+            originalQuality = "mp3 128kbps",
+            upgradedQuality = "flac 1000kbps",
+            timestamp = 1234567890,
+            status = UpgradeStatus.COMPLETED,
+            mode = UpgradeMode.KEEP_ORIGINAL
+        )
+
+        doReturn(listOf(record)).`when`(manager).getRecords()
+
+        // 保留原文件模式下原文件还在，被升级的是它；新文件是额外的一份
         assertTrue(manager.isUpgraded(File("/path/to/original.mp3")))
+        assertFalse(manager.isUpgraded(File("/path/to/upgraded.flac")))
     }
 
     @Test

@@ -71,16 +71,21 @@ fun List<ScannedFolder>.applyUpgrades(
     if (upgrades.isEmpty()) return this to selected
     val byOldPath = upgrades.associateBy { it.original.localFile.absolutePath }
     val folders = map { folder ->
+        var replaced = 0
+        val songs = folder.songs.map { song ->
+            val upgrade = byOldPath[song.localFile.absolutePath] ?: return@map song
+            replaced++
+            song.copy(
+                name = upgrade.newFile.nameWithoutExtension.substringBefore(" - "),
+                album = upgrade.newFile.parentFile?.name ?: song.album,
+                localFile = upgrade.newFile,
+                qualityInfo = upgrade.newQuality ?: song.qualityInfo,
+            )
+        }
         folder.copy(
-            songs = folder.songs.map { song ->
-                val upgrade = byOldPath[song.localFile.absolutePath] ?: return@map song
-                song.copy(
-                    name = upgrade.newFile.nameWithoutExtension.substringBefore(" - "),
-                    album = upgrade.newFile.parentFile?.name ?: song.album,
-                    localFile = upgrade.newFile,
-                    qualityInfo = upgrade.newQuality ?: song.qualityInfo,
-                )
-            }
+            songs = songs,
+            // 升级过的歌不再计入可升级数，文件夹标题的「已升级 N 首」跟着更新
+            upgradeableCount = (folder.upgradeableCount - replaced).coerceAtLeast(0),
         )
     }
     val newSelected = selected

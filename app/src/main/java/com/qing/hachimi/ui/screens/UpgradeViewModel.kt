@@ -125,7 +125,6 @@ class UpgradeViewModel(
                     scannedFolders = scannedFolders,
                     isScanning = false,
                     scanProgress = null,
-                    expandedFolders = emptySet(),
                     statusMessage = "扫描完成，找到 $totalSongs 首歌曲"
                 )
             } catch (e: CancellationException) {

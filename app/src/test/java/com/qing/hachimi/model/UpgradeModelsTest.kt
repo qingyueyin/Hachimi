@@ -49,6 +49,8 @@ class UpgradeModelsTest {
         assertEquals(newFile, updated.localFile)
         assertEquals("flac", updated.qualityInfo.format)
         assertEquals(1000, updated.qualityInfo.bitrate)
+        // 升级过的歌不再计入可升级数
+        assertEquals(0, folders.single().upgradeableCount)
         // 选中集合跟着新文件走，否则升级后勾选状态会丢
         assertEquals(setOf(newFile.absolutePath), selected)
     }

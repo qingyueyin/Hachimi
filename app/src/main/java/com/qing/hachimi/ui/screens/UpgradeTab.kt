@@ -340,6 +340,7 @@ private fun FolderSection(
     val folder = scannedFolder.folder
     val songs = scannedFolder.songs
     val selectedInFolder = songs.count { it.localFile.absolutePath in selectedSongs }
+    val upgradedCount = (songs.size - scannedFolder.upgradeableCount).coerceAtLeast(0)
 
     Card(modifier = Modifier.fillMaxWidth().directionalEntrance(folder.absolutePath)) {
         Column {
@@ -349,7 +350,11 @@ private fun FolderSection(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(folder.name, style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("${songs.size} 首", style = MiuixTheme.textStyles.body2, color = colorScheme.onSurfaceVariantActions)
+                    Text(
+                        if (upgradedCount > 0) "${songs.size} 首 · $upgradedCount 首已升级" else "${songs.size} 首",
+                        style = MiuixTheme.textStyles.body2,
+                        color = colorScheme.onSurfaceVariantActions,
+                    )
                 }
                 Text(if (isExpanded) "收起" else "展开", style = MiuixTheme.textStyles.body2, color = colorScheme.primary)
             }

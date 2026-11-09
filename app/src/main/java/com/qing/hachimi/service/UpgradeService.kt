@@ -65,10 +65,7 @@ class UpgradeService(
         onSongs: suspend (folder: File, songs: List<SongInfo>) -> Unit = { _, _ -> }
     ): List<ScannedFolder> = withContext(Dispatchers.IO) {
         // 历史记录只读一次：isUpgraded 每次都重新解析整份 JSON，500 首会解析 500 遍
-        val upgradedPaths = historyManager.getRecords()
-            .filter { it.status == UpgradeStatus.COMPLETED }
-            .map { it.originalFile.absolutePath }
-            .toSet()
+        val upgradedPaths = historyManager.upgradedFilePaths()
         folders.mapIndexed { index, folder ->
             onProgress(index + 1, folders.size, folder.name)
             val songs = scanFolder(folder) { batch -> onSongs(folder, batch) }
@@ -272,7 +269,8 @@ class UpgradeService(
                             originalQuality = "${song.qualityInfo.format} ${song.qualityInfo.bitrate}kbps",
                             upgradedQuality = "${downloadedQuality.format} ${downloadedQuality.bitrate}kbps",
                             timestamp = System.currentTimeMillis(),
-                            status = UpgradeStatus.COMPLETED
+                            status = UpgradeStatus.COMPLETED,
+                            mode = mode
                         )
                     )
                     UpgradeResult(
@@ -296,7 +294,8 @@ class UpgradeService(
                             originalQuality = "${song.qualityInfo.format} ${song.qualityInfo.bitrate}kbps",
                             upgradedQuality = "${downloadedQuality.format} ${downloadedQuality.bitrate}kbps",
                             timestamp = System.currentTimeMillis(),
-                            status = UpgradeStatus.COMPLETED
+                            status = UpgradeStatus.COMPLETED,
+                            mode = mode
                         )
                     )
                     UpgradeResult(
