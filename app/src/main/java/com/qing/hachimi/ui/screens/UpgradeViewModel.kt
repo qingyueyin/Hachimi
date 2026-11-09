@@ -6,6 +6,7 @@ import com.qing.hachimi.data.local.CookieManager
 import com.qing.hachimi.data.model.*
 import com.qing.hachimi.service.UpgradeService
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -95,7 +96,7 @@ class UpgradeViewModel(
             return
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.Main.immediate) {
             _uiState.value = _uiState.value.copy(
                 isScanning = true,
                 scanProgress = ScanProgress(0, folders.size, ""),
@@ -107,11 +108,18 @@ class UpgradeViewModel(
             )
 
             try {
-                val scannedFolders = upgradeService.scanFolders(folders) { current, total, folderName ->
+                val scannedFolders = upgradeService.scanFoldersIncremental(folders, onProgress = { current, total, folderName ->
                     _uiState.value = _uiState.value.copy(
                         scanProgress = ScanProgress(current, total, folderName)
                     )
-                }
+                }, onSongs = { folder, songs ->
+                    // 回调在 IO 线程，改状态统一回主线程；顺序由 IO 侧串行保证
+                    viewModelScope.launch(Dispatchers.Main.immediate) {
+                        _uiState.value = _uiState.value.copy(
+                            scannedFolders = _uiState.value.scannedFolders.appendSongs(folder, songs)
+                        )
+                    }
+                })
 
                 val totalSongs = scannedFolders.sumOf { it.songs.size }
                 _uiState.value = _uiState.value.copy(

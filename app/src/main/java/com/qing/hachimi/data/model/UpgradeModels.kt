@@ -37,6 +37,20 @@ data class ScannedFolder(
     val upgradeableCount: Int
 )
 
+/** 扫描过程中把新发现的一批歌曲并入对应文件夹；文件夹不存在就新建 */
+fun List<ScannedFolder>.appendSongs(folder: File, songs: List<SongInfo>): List<ScannedFolder> {
+    if (songs.isEmpty()) return this
+    val index = indexOfFirst { it.folder == folder }
+    return if (index < 0) {
+        this + ScannedFolder(folder = folder, songs = songs, upgradeableCount = songs.size)
+    } else {
+        toMutableList().also {
+            val old = it[index]
+            it[index] = old.copy(songs = old.songs + songs)
+        }
+    }
+}
+
 data class UpgradeProgress(
     val current: Int,
     val total: Int,

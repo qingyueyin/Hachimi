@@ -1,4 +1,4 @@
-package com.qing.hachimi.service
+﻿package com.qing.hachimi.service
 
 import com.qing.hachimi.data.api.UpgradeApi
 import com.qing.hachimi.data.local.UpgradeHistoryManager
@@ -38,6 +38,7 @@ class UpgradeService(
         private const val DOWNLOAD_POLL_INTERVAL_MS = 100L
         private const val SEARCH_TIMEOUT_MS = 15_000L
         private const val MAX_CONCURRENT_SEARCHES = 3
+        private const val EMIT_EVERY = 20
         private val AUDIO_FORMATS = setOf("mp3", "flac", "wav", "aac", "ogg", "opus", "m4a", "wma", "ape", "wv")
     }
 
@@ -49,10 +50,20 @@ class UpgradeService(
     suspend fun scanFolders(
         folders: List<File>,
         onProgress: (current: Int, total: Int, folderName: String) -> Unit = { _, _, _ -> }
+    ): List<ScannedFolder> = scanFoldersIncremental(folders, onProgress)
+
+    /**
+     * 扫描文件夹并逐首回调结果，方便界面边扫边显示。
+     * onSongs 在 IO 线程调用，调用方自行切回主线程更新界面。
+     */
+    suspend fun scanFoldersIncremental(
+        folders: List<File>,
+        onProgress: (current: Int, total: Int, folderName: String) -> Unit = { _, _, _ -> },
+        onSongs: (folder: File, songs: List<SongInfo>) -> Unit = { _, _ -> }
     ): List<ScannedFolder> = withContext(Dispatchers.IO) {
         folders.mapIndexed { index, folder ->
             onProgress(index + 1, folders.size, folder.name)
-            val songs = scanFolder(folder)
+            val songs = scanFolder(folder) { batch -> onSongs(folder, batch) }
             val upgradeableCount = songs.count { song ->
                 !historyManager.isUpgraded(song.localFile)
             }
@@ -65,14 +76,19 @@ class UpgradeService(
         }
     }
 
-    private fun scanFolder(folder: File): List<SongInfo> {
+    /**
+     * @param onBatch 每分析完一首就追加到批缓冲，缓冲满 [EMIT_EVERY] 条回调一次；
+     *                500 首的歌单如果只在结束后一次性交给界面，会连续构建几百行内容、直接卡住主线程。
+     */
+    private fun scanFolder(folder: File, onBatch: (List<SongInfo>) -> Unit = {}): List<SongInfo> {
         if (!folder.exists() || !folder.isDirectory) {
             return emptyList()
         }
 
-        return folder.walkTopDown()
+        val pending = mutableListOf<SongInfo>()
+        val parsed = folder.walkTopDown()
             .filter { it.isFile && isAudioFile(it) }
-            .mapNotNull { file ->
+            .map { file ->
                 try {
                     val qualityInfo = audioAnalyzer.analyzeFile(file)
                     val fileName = file.nameWithoutExtension
@@ -93,7 +109,21 @@ class UpgradeService(
                     AppLogger.error("解析文件失败: ${file.name}", e)
                     null
                 }
-            }.toList()
+            }
+            .filterNotNull()
+            .toList()
+
+        val songs = mutableListOf<SongInfo>()
+        for (song in parsed) {
+            songs += song
+            pending += song
+            if (pending.size >= EMIT_EVERY) {
+                onBatch(pending.toList())
+                pending.clear()
+            }
+        }
+        if (pending.isNotEmpty()) onBatch(pending.toList())
+        return songs
     }
 
     suspend fun searchOnline(song: SongInfo, cookies: Map<String, String>): List<OnlineVersion> {

@@ -332,14 +332,22 @@ private fun FolderSection(
             }
 
             AnimatedVisibility(visible = isExpanded) {
-                Column {
-                    HorizontalDivider(color = colorScheme.outline.copy(alpha = 0.2f))
-                    Row(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.md, vertical = AppSpacing.xs), verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(text = if (selectedInFolder < songs.size) "全选" else "取消全选", onClick = if (selectedInFolder < songs.size) onSelectAll else onDeselectAll)
-                        Spacer(Modifier.weight(1f))
-                        Text("${selectedInFolder}/${songs.size}", style = MiuixTheme.textStyles.body2, color = colorScheme.onSurfaceVariantActions)
+                // 固定高度的懒加载列表：展开 500 首时只构建可见的十几行，
+                // 原来的 Column+songs.forEach 一次性建满所有行，滚动和勾选都会卡顿
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 520.dp),
+                ) {
+                    item {
+                        HorizontalDivider(color = colorScheme.outline.copy(alpha = 0.2f))
+                        Row(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.md, vertical = AppSpacing.xs), verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(text = if (selectedInFolder < songs.size) "全选" else "取消全选", onClick = if (selectedInFolder < songs.size) onSelectAll else onDeselectAll)
+                            Spacer(Modifier.weight(1f))
+                            Text("${selectedInFolder}/${songs.size}", style = MiuixTheme.textStyles.body2, color = colorScheme.onSurfaceVariantActions)
+                        }
                     }
-                    songs.forEach { song ->
+                    items(songs, key = { it.localFile.absolutePath }) { song ->
                         Row(
                             modifier = Modifier.fillMaxWidth().clickable { onToggleSong(song.localFile.absolutePath) }.padding(horizontal = AppSpacing.md, vertical = AppSpacing.sm),
                             verticalAlignment = Alignment.CenterVertically

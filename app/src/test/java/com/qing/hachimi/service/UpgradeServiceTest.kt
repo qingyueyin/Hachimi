@@ -98,6 +98,32 @@ class UpgradeServiceTest {
     }
 
     @Test
+    fun `incremental scan reports songs in batches before finishing`() = runBlocking {
+        val analyzer = mock(AudioQualityAnalyzer::class.java)
+        val history = mock(UpgradeHistoryManager::class.java)
+        val folder = Files.createTempDirectory("hachimi-batch-scan").toFile()
+        val files = (1..45).map { i ->
+            File(folder, "Song$i - Artist.mp3").apply { writeText("audio") }
+        }
+        files.forEach { `when`(analyzer.analyzeFile(it)).thenReturn(quality("mp3", 320)) }
+
+        try {
+            val service = UpgradeService(analyzer, mock(), history, mock())
+            val batches = mutableListOf<List<SongInfo>>()
+
+            val result = service.scanFoldersIncremental(
+                folders = listOf(folder),
+                onSongs = { _, songs -> batches += songs }
+            )
+
+            // 45 首按 20 一批推送，最后一并包含剩余 5 首；全部歌曲与最终结果一致
+            assertEquals(listOf(20, 20, 5), batches.map { it.size })
+            assertEquals(result.single().songs.map { it.localFile }, batches.flatten().map { it.localFile })
+        } finally {
+            folder.deleteRecursively()
+        }
+    }
+    @Test
     fun `upgrade candidate checks run concurrently with a limit of three`() = runBlocking {
         val api = mock(UpgradeApi::class.java)
         val active = AtomicInteger(0)
