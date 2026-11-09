@@ -18,6 +18,18 @@ class NavStackSyncTest {
     private fun SnapshotStateList<NavKey>.snapshot(): List<NavKey> = toList()
 
     @Test
+    fun `pushing the same key twice does not duplicate`() {
+        // 连点两下歌单卡片会连着入栈两次同一个 key，NavDisplay 会直接抛异常崩掉
+        val stack = stackOf(NavKey2.MyHome)
+        val detail = NavKey2.MyPlaylistDetail(1L, "某歌单")
+
+        assertEquals(true, pushNavKey(stack, detail))
+        assertEquals(false, pushNavKey(stack, detail))
+
+        assertEquals(listOf<NavKey>(NavKey2.MyHome, detail), stack.snapshot())
+    }
+
+    @Test
     fun `push appends to the existing stack`() {
         val current = stackOf(NavKey2.DiscoverHome)
         val target = listOf(

@@ -74,6 +74,19 @@ internal fun syncNavStack(current: SnapshotStateList<NavKey>, target: List<NavKe
     }
 }
 
+/**
+ * 压入一层页面，但拒绝栈里已存在的同一个 key。
+ *
+ * NavDisplay 要求同一栈上每个 entry 的 contentKey 唯一，重复会直接抛
+ * 「Duplicate contentKey on the back stack」把界面打崩。这些页面都按 ViewModel
+ * 状态渲染，忽略重复入栈时，当前页会直接显示新内容，行为上等价于跳过去。
+ */
+internal fun pushNavKey(stack: MutableList<NavKey>, key: NavKey): Boolean {
+    if (stack.any { it == key }) return false
+    stack.add(key)
+    return true
+}
+
 @Composable
 fun rememberMainNavBackStack(): SnapshotStateList<NavKey> =
     remember { createMainBackStack() }

@@ -3,6 +3,7 @@ package com.qing.hachimi.ui.screens
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import com.qing.hachimi.ui.navigation.NavKey2
+import com.qing.hachimi.ui.navigation.pushNavKey
 import top.yukonga.miuix.kmp.nav.core.NavDisplay
 import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -135,7 +136,7 @@ fun SearchTab(
     // 搜索页由导航栈驱动：首页在栈底，详情叠在上面。
     // 返回手势（含预测性返回拖动预览）、位移缩放与圆角裁剪由 NavDisplay 提供。
     // NavDisplay 不允许空栈，首帧先用当前层级预填，之后由 LaunchedEffect 同步
-    val openDetailNav: (String) -> Unit = { key -> navStack.add(NavKey2.SearchResult(key)) }
+    val openDetailNav: (String) -> Unit = { key -> pushNavKey(navStack, NavKey2.SearchResult(key)) }
     val backNav: () -> Unit = {
         if (navStack.size > 1) navStack.removeAt(navStack.lastIndex)
         onBack()
@@ -153,7 +154,7 @@ fun SearchTab(
         onPodcastClick(podcast)
     }
     val onArtistClickNav: (ArtistResult) -> Unit = { artist ->
-        navStack.add(NavKey2.ArtistDetail)
+        pushNavKey(navStack, NavKey2.ArtistDetail)
         onArtistClick(artist)
     }
     // 兜底：ViewModel 回到首页时（例如清空搜索），栈也回到首页

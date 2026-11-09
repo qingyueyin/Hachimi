@@ -3,6 +3,7 @@ package com.qing.hachimi.ui.screens
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import com.qing.hachimi.ui.navigation.NavKey2
+import com.qing.hachimi.ui.navigation.pushNavKey
 import top.yukonga.miuix.kmp.nav.core.NavDisplay
 import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
 import top.yukonga.miuix.kmp.nav.core.NavKey
@@ -153,16 +154,16 @@ fun MyTab(
     }
     val openPlaylistNav: (PlaylistApi.UserPlaylist) -> Unit = { playlist ->
         onPlaylistClick(playlist)
-        navStack.add(NavKey2.MyPlaylistDetail(playlist.id, playlist.name))
+        pushNavKey(navStack, NavKey2.MyPlaylistDetail(playlist.id, playlist.name))
     }
     // 收藏专辑/艺人同样进详情层，和歌单共用一个页面
     val openAlbumNav: (AlbumResult) -> Unit = { album ->
         onAlbumClick(album)
-        navStack.add(NavKey2.MyPlaylistDetail(album.id, album.name))
+        pushNavKey(navStack, NavKey2.MyPlaylistDetail(album.id, album.name))
     }
     val openArtistNav: (ArtistResult) -> Unit = { artist ->
         onArtistClick(artist)
-        navStack.add(NavKey2.MyPlaylistDetail(artist.id, artist.name))
+        pushNavKey(navStack, NavKey2.MyPlaylistDetail(artist.id, artist.name))
     }
     // 只负责出栈，ViewModel 状态由上面的 LaunchedEffect 跟着栈同步
     val backNav: () -> Unit = {
