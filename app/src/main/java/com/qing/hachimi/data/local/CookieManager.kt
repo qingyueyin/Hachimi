@@ -89,16 +89,6 @@ class CookieManager(context: Context) {
     }
 
     /**
-     * 重新打开门闩，等待方会等下一轮获取完成后才继续。
-     */
-    fun resetTokenGate() {
-        if (tokenReadyGate.isCompleted) {
-            tokenReadyGate = CompletableDeferred()
-            _tokenInitStarted = false
-        }
-    }
-
-    /**
      * Returns true if we already have a token (MUSIC_U or MUSIC_A) saved on disk.
      * Used to decide whether we need to fetch a new anonymous token at startup.
      */
@@ -201,7 +191,11 @@ class CookieManager(context: Context) {
             cookieStr
         }
 
-        // Try standard cookie format first (key=value; key=value; ...)
+        // 优先按 [节名] 的导出格式解析：里面有 [完整Cookie] 段，混进其他格式会解析乱
+        val sectionMap = parseSectionFormat(decoded)
+        if (!sectionMap["MUSIC_U"].isNullOrBlank()) return saveCookieMapForLogin(sectionMap)
+
+        // 其次按标准 Cookie 格式（key=value; key=value; ...）
         val pairs = decoded
             .replace("\n", ";").replace("\r", "")
             .split(";")
@@ -226,27 +220,19 @@ class CookieManager(context: Context) {
             }
         }
 
-        // Fallback: try exported format ([KEY]\nVALUE\n\n)
-        val sectionRegex = Regex("""\[(\w+)]\s*\n([^\[]+)""")
-        val sectionMatches = sectionRegex.findAll(decoded)
-        if (sectionMatches.any()) {
-            val map = mutableMapOf<String, String>()
-            for (match in sectionRegex.findAll(decoded)) {
-                val key = match.groupValues[1].trim()
-                val value = match.groupValues[2].trim().lines().first().trim()
-                when (key) {
-                    "MUSIC_U" -> map["MUSIC_U"] = value
-                    "__csrf" -> map["__csrf"] = value
-                    "MUSIC_A" -> map["MUSIC_A"] = value
-                    "NMTID" -> map["NMTID"] = value
-                    "WEVNSM" -> map["WEVNSM"] = value
-                    "WNMCID" -> map["WNMCID"] = value
-                }
-            }
-            if (!map["MUSIC_U"].isNullOrBlank()) return saveCookieMapForLogin(map)
-        }
-
         return ParseResult(false, "未识别到有效 Cookie 键值对，请检查格式")
+    }
+
+    /** 解析导出格式：[节名]\n值\n\n，只取本 App 认得的节 */
+    private fun parseSectionFormat(text: String): Map<String, String> {
+        val sectionRegex = Regex("""\[([^\]\r\n]+)]\s*\n([^\[]*)""")
+        val map = mutableMapOf<String, String>()
+        for (match in sectionRegex.findAll(text)) {
+            val key = match.groupValues[1].trim()
+            val value = match.groupValues[2].trim().lines().firstOrNull().orEmpty().trim()
+            if (key in ALLOWED_COOKIE_KEYS && value.isNotBlank()) map[key] = value
+        }
+        return map
     }
 
     fun parseAndSave(cookieStr: String): Boolean {
@@ -282,10 +268,14 @@ class CookieManager(context: Context) {
             nmtid = nmtid,
             wevnsm = wevnsm,
             wnmcid = wnmcid,
-            rawCookies = getRawCookies(),
+            rawCookies = buildRawCookies(cookies),
             userId = getUserId()
         )
     }
+
+    /** 导出用 Cookie 串，标准 key=value; 格式，可直接粘进别的客户端 */
+    private fun buildRawCookies(cookies: Map<String, String>): String =
+        cookies.map { (k, v) -> "$k=$v" }.joinToString("; ")
 
     data class AccountExportData(
         val musicU: String,

@@ -1,4 +1,4 @@
-package com.qing.hachimi.ui.screens
+﻿package com.qing.hachimi.ui.screens
 
 import androidx.lifecycle.ViewModel
 import androidx.compose.runtime.Immutable
@@ -450,7 +450,7 @@ class MainViewModel(
             return false
         }
 
-        // 解析导出的数据格式
+        // 解析导出的数据格式（节名格式为主，也接受标准 key=value 串）
         val musicU = extractField(data, "MUSIC_U")
 
         if (musicU.isBlank()) {
@@ -462,6 +462,8 @@ class MainViewModel(
         val result = cookieManager.saveMusicUDirect(musicU)
         if (result.success) {
             saveCurrentUserId()
+            // 补上 NMTID/WEVNSM 等附加字段；只传 MUSIC_U 时这些会丢
+            cookieManager.parseAndSaveSmart(data)
             _uiState.value = _uiState.value.copy(
                 isLoggedIn = cookieManager.isLoggedIn(),
                 userId = cookieManager.getUserId(),
@@ -478,7 +480,8 @@ class MainViewModel(
         val patterns = listOf(
             Regex("\\[$fieldName\\]\\s*\\n([^\\[\\n]+)"),
             Regex("$fieldName:\\s*([^\\n]+)"),
-            Regex("\\[$fieldName\\]\\s*([^\\[\\n]+)")
+            Regex("\\[$fieldName\\]\\s*([^\\[\\n]+)"),
+            Regex("(?:^|[;\\s])" + fieldName + "=([^;\\s]+)")
         )
         for (pattern in patterns) {
             val match = pattern.find(data)
