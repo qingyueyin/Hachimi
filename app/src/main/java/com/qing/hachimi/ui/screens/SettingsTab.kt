@@ -542,7 +542,7 @@ fun AppearanceSettingsScreen(
             ) {
                 SwitchPreference(
                     title = "启用悬浮栏",
-                    summary = "关闭后底栏贴底显示",
+                    summary = "关闭后底栏贴底显示；宽屏默认使用侧边栏，保持开启则继续用底栏",
                     startAction = {
                         Icon(
                             MiuixIcons.Tune,

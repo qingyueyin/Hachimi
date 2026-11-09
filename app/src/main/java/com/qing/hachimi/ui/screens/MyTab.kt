@@ -471,8 +471,15 @@ private fun UserProfileCard(
             }
             Spacer(Modifier.width(AppSpacing.md))
             Column(Modifier.weight(1f)) {
+                // 超过 8 秒还没拿到昵称，就不再显示“加载中”，改成可自我解释的占位
+                var timedOut by remember { mutableStateOf(false) }
+                LaunchedEffect(Unit) {
+                    kotlinx.coroutines.delay(8_000L)
+                    timedOut = true
+                }
+                val nickname = profile?.nickname?.takeIf { it.isNotBlank() }
                 Text(
-                    text = profile?.nickname?.takeIf { it.isNotBlank() } ?: "加载中...",
+                    text = nickname ?: if (timedOut) "未获取到昵称，点右上角刷新" else "加载中...",
                     style = MiuixTheme.textStyles.title3,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,

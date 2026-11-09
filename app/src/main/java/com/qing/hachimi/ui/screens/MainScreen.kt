@@ -148,7 +148,7 @@ fun MainScreen(
     val railScreen = rememberIsNavigationRailScreen()
     val floatingBarGlass = uiState.floatingBarEffect == FloatingBarEffect.LIQUID_GLASS ||
         (uiState.floatingBarEffect == FloatingBarEffect.FROSTED_GLASS && uiState.blurEffect)
-    val useRail = railScreen && !floatingBarGlass
+    val useRail = railScreen && !floatingBarGlass && !uiState.floatingNavigationBar
     // 宽屏布局与侧边栏是两件事：开了玻璃特效仍然算宽屏，只是底栏不换成侧边栏
     val isWideLayout = railScreen
     // 设置页改用导航栈：二级页是栈上的一层，返回由 NavDisplay 处理
@@ -603,7 +603,31 @@ fun MainScreen(
         }
 
         // 底部操作区位于导航动画层之外，返回手势时原地不动；实时模糊取的是其下方真实内容
-        if (!useRail) {
+        // 宽屏默认用侧边栏；用户保留“启用悬浮栏”时改为显示底部栏
+        if (railScreen) {
+            if (!useRail) {
+                if (uiState.floatingNavigationBar) {
+                    MainBottomBar(
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                        currentTab = currentTab,
+                        isLoggedIn = uiState.isLoggedIn,
+                        backdrop = backdrop,
+                        isBlurEnabled = uiState.blurEffect,
+                        effect = uiState.floatingBarEffect,
+                        onTabChange = onTabClick,
+                    )
+                } else {
+                    MainDockedNavigationBar(
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                        currentTab = currentTab,
+                        isLoggedIn = uiState.isLoggedIn,
+                        backdrop = backdrop,
+                        isBlurEnabled = uiState.blurEffect,
+                        onTabChange = onTabClick,
+                    )
+                }
+            }
+        } else {
             if (uiState.floatingNavigationBar) {
                 MainBottomBar(
                     modifier = Modifier.align(Alignment.BottomCenter),

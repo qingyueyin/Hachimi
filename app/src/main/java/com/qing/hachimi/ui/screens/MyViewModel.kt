@@ -116,6 +116,9 @@ class MyViewModel(
     /** 进入【我的】主页：并行加载用户信息、歌单、云盘（均有缓存兜底） */
     fun openHome() {
         val state = _uiState.value
+        // 昵称为空说明上次要么失败要么返回空，重新进页时重试一次
+        if (state.profile == null || state.profile.nickname.isBlank()) loadProfile()
+        // 已经是主页且已有歌单时只补用户信息，其余内容保留
         if (state.section == MySection.HOME && state.userPlaylists.isNotEmpty()) return
         _uiState.value = state.copy(
             section = MySection.HOME,
@@ -126,7 +129,6 @@ class MyViewModel(
             playlistName = "",
             statusMessage = null,
         )
-        if (state.profile == null) loadProfile()
         if (state.userPlaylists.isEmpty()) loadMyPlaylists()
         if (state.cloudSongs.isEmpty()) loadCloudSongs()
     }
@@ -262,11 +264,18 @@ class MyViewModel(
     }
 
     // ── Profile ──
+    private var profileLoading = false
     private fun loadProfile() {
         if (!cookieManager.isLoggedIn()) return
+        if (profileLoading) return
+        profileLoading = true
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val status = repository.loginApi().checkLoginStatus(cookieManager.getCookies())
+                AppLogger.info(
+                    "[MyVM] loadProfile: isLoggedIn=${status.isLoggedIn}, " +
+                        "nickname='${status.nickname}', avatar=${status.avatarUrl.isNotBlank()}"
+                )
                 if (status.isLoggedIn) {
                     if (status.userId > 0) cookieManager.saveUserId(status.userId)
                     _uiState.value = _uiState.value.copy(
@@ -278,6 +287,8 @@ class MyViewModel(
                 }
             } catch (e: Exception) {
                 AppLogger.error("[MyVM] loadProfile failed", e)
+            } finally {
+                profileLoading = false
             }
         }
     }
