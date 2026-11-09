@@ -40,6 +40,18 @@ import kotlinx.coroutines.withTimeout
 /** 发现 Tab 的三个层级，作为显式导航栈的元素 */
 enum class DiscoverLevel { HOME, CATEGORY, DETAIL }
 
+/**
+ * 发现页导航栈的一层。
+ *
+ * [id] 是页面实例编号，入栈时分配，之后不随数据变化：
+ * 导航 key 用它做身份，同一条栈上任意两层都不会撞 key。
+ */
+@Immutable
+data class DiscoverStackEntry(
+    val level: DiscoverLevel,
+    val id: Long = 0,
+)
+
 @Immutable
 data class DiscoverUiState(
     val sourceMode: SourceMode = SourceMode.RECOMMEND,
@@ -109,17 +121,17 @@ data class DiscoverUiState(
     val fmThreshold: Int = 3,
     val isPreparingDownloads: Boolean = false,
     /**
-     * 发现页的导航层级栈。[levelStack] 只记录层级标识，不承载数据；
+     * 发现页的导航层级栈。[levelStack] 只记录层级标识和页面编号，不承载数据；
      * 数据仍然放在 songs / collectionDetail / activeArtist 等字段里。
      *
      * 迁移说明：以前层级由 isDetailView 从数据反推（songs 非空就当作详情页），
      * 导致请求失败时页面不跳转、刷新清空数据时页面被弹回。改成显式栈后，
      * 层级只由“用户点了什么”决定，异步数据回来不会改变当前所在页。
      */
-    val levelStack: List<DiscoverLevel> = listOf(DiscoverLevel.HOME),
+    val levelStack: List<DiscoverStackEntry> = listOf(DiscoverStackEntry(DiscoverLevel.HOME)),
 ) {
     /** 当前层级（栈顶） */
-    val currentLevel: DiscoverLevel get() = levelStack.lastOrNull() ?: DiscoverLevel.HOME
+    val currentLevel: DiscoverLevel get() = levelStack.lastOrNull()?.level ?: DiscoverLevel.HOME
 
     /** 详情页的数据键，用于在栈内切换不同详情内容 */
     val detailKey: String get() = when {
@@ -167,6 +179,12 @@ class DiscoverViewModel(
     val uiState: StateFlow<DiscoverUiState> = _uiState
     private var retryDetail: (() -> Unit)? = null
     private var detailRequestId = 0L
+    /** 页面实例编号，每次入栈 +1；只用于让导航 key 唯一 */
+    private var nextPageId = 0L
+
+    private fun newEntry(level: DiscoverLevel) = DiscoverStackEntry(level, ++nextPageId)
+
+    private fun rootStack(vararg levels: DiscoverLevel) = levels.map(::newEntry)
 
     init {
         val columns = settingsManager.getGridColumns(gridPageKey(SourceMode.RECOMMEND))
@@ -215,9 +233,9 @@ class DiscoverViewModel(
         if (mode == current) return
         detailRequestId++
         val targetStack = if (mode == SourceMode.RECOMMEND) {
-            listOf(DiscoverLevel.HOME)
+            rootStack(DiscoverLevel.HOME)
         } else {
-            listOf(DiscoverLevel.HOME, DiscoverLevel.CATEGORY)
+            rootStack(DiscoverLevel.HOME, DiscoverLevel.CATEGORY)
         }
         _uiState.value = _uiState.value.copy(
             previousSourceMode = current,
@@ -1045,7 +1063,7 @@ class DiscoverViewModel(
     fun resetToHome() {
         detailRequestId++
         _uiState.value = _uiState.value.copy(
-            levelStack = listOf(DiscoverLevel.HOME),
+            levelStack = rootStack(DiscoverLevel.HOME),
             sourceMode = SourceMode.RECOMMEND,
             previousSourceMode = SourceMode.RECOMMEND,
             preSongSourceMode = SourceMode.RECOMMEND,
@@ -1147,7 +1165,7 @@ class DiscoverViewModel(
             // 和进入前是哪种分类无关：歌手页会把 sourceMode 改写成 ARTIST_DETAIL，
             // 照着它退回分类层，分类页就没有可显示的数据，会渲染成空列表。
             _uiState.value = state.copy(
-                levelStack = listOf(DiscoverLevel.HOME, DiscoverLevel.CATEGORY),
+                levelStack = rootStack(DiscoverLevel.HOME, DiscoverLevel.CATEGORY),
                 sourceMode = SourceMode.ARTISTS,
                 artistParentSourceMode = SourceMode.ARTISTS,
                 previousSourceMode = SourceMode.ARTIST_DETAIL,
@@ -1269,7 +1287,7 @@ class DiscoverViewModel(
         // 同一页重试时保持栈不变，否则每点一次重试就多一层。
         val isSameDetail = state.currentLevel == DiscoverLevel.DETAIL &&
             state.sourceLabel == label && state.playlistName == name
-        val newStack = if (isSameDetail) state.levelStack else state.levelStack + DiscoverLevel.DETAIL
+        val newStack = if (isSameDetail) state.levelStack else state.levelStack + newEntry(DiscoverLevel.DETAIL)
         _uiState.value = state.copy(
             levelStack = newStack,
             preSongSourceMode = source,

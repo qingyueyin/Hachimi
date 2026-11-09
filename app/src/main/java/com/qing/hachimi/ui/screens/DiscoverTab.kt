@@ -43,6 +43,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -166,17 +167,27 @@ fun DiscoverTab(
     // 顶栏高度由 Miuix TopAppBar 决定，一级页和二级页统一使用 Scaffold 给的内边距
     val primaryPadding = innerPadding
     val contextPadding = innerPadding
-    val sortedSongs = remember(uiState.songs, sortOption, sortAscending) {
-        uiState.songs.sortedByOption(sortOption, sortAscending)
-    }
     // 导航栈由 ViewModel 持有；这里只负责把它映射成 NavDisplay 需要的可变列表。
     // 返回手势（含预测性返回的拖动预览）、页面位移缩放与圆角裁剪由 NavDisplay 提供。
     // NavDisplay 不允许空栈，首帧先用当前层级预填，之后由 LaunchedEffect 同步
     val navStack = remember {
-        mutableStateListOf<NavKey>().apply { addAll(uiState.levelStack.mapIndexed { i, lvl -> lvl.toNavKey(uiState, i) }) }
+        mutableStateListOf<NavKey>().apply { addAll(uiState.levelStack.map { it.toNavKey() }) }
     }
     LaunchedEffect(uiState.levelStack) {
-        syncNavStack(navStack, uiState.levelStack.mapIndexed { i, lvl -> lvl.toNavKey(uiState, i) })
+        syncNavStack(navStack, uiState.levelStack.map { it.toNavKey() })
+    }
+    // 转场期间上下两层同时在绘制。下层如果也读实时状态，会显示成刚打开的新页面，
+    // 看起来像「连续进入了两次」。所以每层记录它作为顶层时的最后一份状态，
+    // 非顶层一律按这份快照绘制。只留最近 16 页，避免长时间浏览后越积越多。
+    val pageStates = remember {
+        object : LinkedHashMap<Long, DiscoverUiState>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, DiscoverUiState>) =
+                size > 16
+        }
+    }
+    val topPageId = uiState.levelStack.lastOrNull()?.takeIf { it.level == DiscoverLevel.DETAIL }?.id
+    SideEffect {
+        if (topPageId != null) pageStates[topPageId] = uiState
     }
     NavDisplay(
         backStack = navStack,
@@ -229,12 +240,17 @@ fun DiscoverTab(
                 )
             }
         }
-        entry<NavKey2.DiscoverSongList> {
+        entry<NavKey2.DiscoverSongList> { key ->
+            // 顶层用实时状态；被压在下面/正在退场的层用它自己的快照
+            val pageState = if (key.pageId == topPageId) uiState else pageStates[key.pageId] ?: uiState
+            val pageSongs = remember(pageState.songs, sortOption, sortAscending) {
+                pageState.songs.sortedByOption(sortOption, sortAscending)
+            }
             PageSurface {
-                if (uiState.isArtistPage) {
+                if (pageState.isArtistPage) {
                     ArtistDetailPage(
-                        state = uiState,
-                        songs = sortedSongs,
+                        state = pageState,
+                        songs = pageSongs,
                         downloadProgress = downloadProgress,
                         onToggleSelect = onToggleSelect,
                         onSelectAll = onSelectAll,
@@ -248,8 +264,8 @@ fun DiscoverTab(
                     )
                 } else {
                     DiscoverSongDetail(
-                        state = uiState,
-                        songs = sortedSongs,
+                        state = pageState,
+                        songs = pageSongs,
                         downloadProgress = downloadProgress,
                         onToggleSelect = onToggleSelect,
                         onSelectAll = onSelectAll,
@@ -265,12 +281,11 @@ fun DiscoverTab(
     }
 }
 
-/** 把 ViewModel 的层级映射为导航 key；详情层用数据键区分，保证横向切换时重建内容 */
-internal fun DiscoverLevel.toNavKey(state: DiscoverUiState, depth: Int = 0): NavKey = when (this) {
+/** 把导航栈的一层映射为导航 key；详情层用页面实例编号做身份 */
+internal fun DiscoverStackEntry.toNavKey(): NavKey = when (level) {
     DiscoverLevel.HOME -> NavKey2.DiscoverHome
     DiscoverLevel.CATEGORY -> NavKey2.DiscoverCategory
-    // depth 只用于保证同一栈里两个详情 entry 的 contentKey 不同（标题不参与显示）
-    DiscoverLevel.DETAIL -> NavKey2.DiscoverSongList(depth)
+    DiscoverLevel.DETAIL -> NavKey2.DiscoverSongList(id)
 }
 
 @OptIn(ExperimentalScrollBarApi::class)

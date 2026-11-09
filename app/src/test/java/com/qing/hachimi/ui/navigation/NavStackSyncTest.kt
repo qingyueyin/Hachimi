@@ -2,9 +2,8 @@ package com.qing.hachimi.ui.navigation
 
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
-import com.qing.hachimi.data.model.SourceMode
 import com.qing.hachimi.ui.screens.DiscoverLevel
-import com.qing.hachimi.ui.screens.DiscoverUiState
+import com.qing.hachimi.ui.screens.DiscoverStackEntry
 import com.qing.hachimi.ui.screens.toNavKey
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -59,25 +58,21 @@ class NavStackSyncTest {
 
     @Test
     fun `category layer key does not depend on source mode`() {
-        // 歌手详情会把 sourceMode 改成 ARTIST_DETAIL，分类层 key 必须保持不变，
-        // 否则 NavDisplay 会把分类页当成新页面重建，重建瞬间列表为空就显示「暂时没有内容」
-        val inArtistCategory = DiscoverUiState(sourceMode = SourceMode.ARTISTS)
-        val inArtistDetail = inArtistCategory.copy(sourceMode = SourceMode.ARTIST_DETAIL)
-
+        // 分类层是 data object，页面内容由 state 决定：歌手详情把 sourceMode
+        // 改成 ARTIST_DETAIL 时，分类层的 key 必须保持不变，否则分类页会被重建
         assertEquals(
-            DiscoverLevel.CATEGORY.toNavKey(inArtistCategory),
-            DiscoverLevel.CATEGORY.toNavKey(inArtistDetail),
+            DiscoverStackEntry(DiscoverLevel.CATEGORY, 1).toNavKey(),
+            DiscoverStackEntry(DiscoverLevel.CATEGORY, 2).toNavKey(),
         )
     }
 
     @Test
     fun `tab root keeps its key after a detail page overwrites source mode`() {
-        // 详情页会把 sourceMode 改成详情自己的值，首页 key 不能跟着变，
-        // 否则返回时首页被重建，动画过程中会露出「暂时没有内容」
-        val root = DiscoverLevel.HOME.toNavKey(DiscoverUiState())
-        listOf(SourceMode.RECOMMEND, SourceMode.ARTIST_DETAIL, SourceMode.SEARCH).forEach { mode ->
-            assertEquals(root, DiscoverLevel.HOME.toNavKey(DiscoverUiState(sourceMode = mode)))
-        }
+        // 首页同样不随内容变 key，返回时不会被重建
+        assertEquals(
+            DiscoverStackEntry(DiscoverLevel.HOME, 1).toNavKey(),
+            DiscoverStackEntry(DiscoverLevel.HOME, 2).toNavKey(),
+        )
     }
 
     @Test
@@ -97,15 +92,14 @@ class NavStackSyncTest {
     }
 
     @Test
-    fun `detail layer key does not depend on which collection is open`() {
-        // 详情页 key 带歌单/专辑/歌手数据的话，换一首歌就会变成新页面被重建，
-        // 动画过程中同样会露出「暂时没有内容」
-        val first = DiscoverUiState(playlistName = "歌单 A")
-        val second = DiscoverUiState(playlistName = "歌单 B", sourceMode = SourceMode.CHARTS)
+    fun `detail layer key stays stable while its data loads`() {
+        // 编号只在入栈时分配，歌单/专辑数据加载前后 key 不变，页面不会被重建
+        val entry = DiscoverStackEntry(DiscoverLevel.DETAIL, 7)
 
+        assertEquals(entry.toNavKey(), entry.toNavKey())
         assertEquals(
-            DiscoverLevel.DETAIL.toNavKey(first),
-            DiscoverLevel.DETAIL.toNavKey(second),
+            NavKey2.DiscoverSongList(7),
+            DiscoverStackEntry(DiscoverLevel.DETAIL, 7).toNavKey(),
         )
     }
 
@@ -113,26 +107,28 @@ class NavStackSyncTest {
     fun `nested detail pages never share a content key`() {
         // 歌手页里点专辑会连着压两层详情。NavDisplay 按 contentKey 判重，
         // 两个详情 entry 的 key 相同会直接抛 Duplicate contentKey 崩掉。
-        val state = DiscoverUiState(playlistName = "某歌手")
-        val stack = listOf(DiscoverLevel.HOME, DiscoverLevel.CATEGORY, DiscoverLevel.DETAIL, DiscoverLevel.DETAIL)
-            .mapIndexed { depth, level -> level.toNavKey(state, depth) }
+        // 编号每条入栈 +1，哪怕是同一个歌手、同名专辑，也不会撞 key
+        val stack = listOf(
+            DiscoverStackEntry(DiscoverLevel.HOME, 1),
+            DiscoverStackEntry(DiscoverLevel.CATEGORY, 2),
+            DiscoverStackEntry(DiscoverLevel.DETAIL, 3),
+            DiscoverStackEntry(DiscoverLevel.DETAIL, 4),
+        ).map { it.toNavKey() }
 
-        val keys = stack
-        assertEquals(keys.size, keys.distinct().size)
+        assertEquals(stack.size, stack.distinct().size)
     }
 
     @Test
     fun `nested detail pages stay in sync when the inner page changes`() {
         // 歌手 → 专辑：只替换最后一层（新专辑替换旧专辑），不能因为 key 相同就漏掉更新
-        val state = DiscoverUiState(playlistName = "旧专辑")
         val current = stackOf(
-            DiscoverLevel.HOME.toNavKey(state, 0),
-            DiscoverLevel.DETAIL.toNavKey(state, 1),
-            DiscoverLevel.DETAIL.toNavKey(state, 2),
+            DiscoverStackEntry(DiscoverLevel.HOME, 1).toNavKey(),
+            DiscoverStackEntry(DiscoverLevel.DETAIL, 2).toNavKey(),
+            DiscoverStackEntry(DiscoverLevel.DETAIL, 3).toNavKey(),
         )
         val target = listOf(
-            DiscoverLevel.HOME.toNavKey(state, 0),
-            DiscoverLevel.DETAIL.toNavKey(state, 1),
+            DiscoverStackEntry(DiscoverLevel.HOME, 1).toNavKey(),
+            DiscoverStackEntry(DiscoverLevel.DETAIL, 2).toNavKey(),
         )
 
         syncNavStack(current, target)

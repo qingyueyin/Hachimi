@@ -367,7 +367,7 @@ class DiscoverViewModelTest {
         viewModel.goBack()
 
         val state = viewModel.uiState.value
-        assertEquals("levelStack=${state.levelStack}", listOf(DiscoverLevel.HOME, DiscoverLevel.CATEGORY), state.levelStack)
+        assertEquals("levelStack=${state.levelStack}", listOf(DiscoverLevel.HOME, DiscoverLevel.CATEGORY), state.levelStack.map { it.level })
         assertEquals("sourceMode", SourceMode.ARTISTS, state.sourceMode)
         assertEquals("artists 不能为空", 1, state.artists.size)
     }
@@ -388,10 +388,50 @@ class DiscoverViewModelTest {
         advanceUntilIdle()
         assertEquals(2, viewModel.uiState.value.levelStack.size)
 
-        // 重试/重新加载同一页时不能再压一层
+        // 重试/重新加载同一页时不能再压一层，页面编号也不能换（换了会被当成新页面重建）
+        val detailId = viewModel.uiState.value.levelStack.last().id
         viewModel.loadArtistDetail(artist, SourceMode.SEARCH)
         advanceUntilIdle()
         assertEquals(2, viewModel.uiState.value.levelStack.size)
+        assertEquals(detailId, viewModel.uiState.value.levelStack.last().id)
+    }
+
+    @Test
+    fun `detail pages get different ids even when names collide`() = runTest(dispatcher) {
+        // 歌手页点开一张和歌手同名的专辑：两层详情的显示名字一样，
+        // 页面编号也必须不同，否则导航栈会把它们当成同一页
+        val repository = repositoryWithHomeContent()
+        val artist = ArtistResult(id = 48161, name = "同名", avatarUrl = "avatar")
+        val album = AlbumResult(id = 99, name = "同名", artist = artist.name, coverUrl = "cover")
+        `when`(repository.getArtistProfile(artist.id)).thenReturn(
+            Result.success(ArtistProfile(id = artist.id, name = artist.name, coverUrl = "hero")),
+        )
+        `when`(repository.getArtistTopSongs(artist.id)).thenReturn(Result.success(emptyList()))
+        `when`(repository.getAlbumDetail(album.id.toString())).thenReturn(
+            Result.success(
+                CollectionContent(
+                    detail = CollectionDetail(
+                        kind = CollectionKind.ALBUM,
+                        id = album.id,
+                        title = album.name,
+                        subtitle = album.artist,
+                    ),
+                    songs = emptyList(),
+                ),
+            ),
+        )
+        val viewModel = viewModel(repository)
+        advanceUntilIdle()
+
+        viewModel.loadArtistDetail(artist)
+        advanceUntilIdle()
+        viewModel.loadAlbumFromResult(album)
+        advanceUntilIdle()
+
+        val stack = viewModel.uiState.value.levelStack
+        assertEquals(3, stack.size)
+        assertEquals(stack.size, stack.distinct().size)
+        assertEquals(stack.size, stack.map { it.id }.distinct().size)
     }
 
     private suspend fun repositoryWithHomeContent(): NeteaseRepository {
