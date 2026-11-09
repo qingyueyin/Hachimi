@@ -81,6 +81,11 @@ class MainViewModel(
         val dir = if (settingsManager.downloadDir.isNotBlank())
             settingsManager.downloadDir else settingsManager.defaultDownloadDir
 
+        AppLogger.info(
+            "[SYS] MainViewModel init: isLoggedIn=${cookieManager.isLoggedIn()}, " +
+                "cookieKeys=${cookieManager.getCookies().keys}, userId=${cookieManager.getUserId()}"
+        )
+
         _uiState.value = _uiState.value.copy(
             isLoggedIn = cookieManager.isLoggedIn(),
             userId = cookieManager.getUserId(),

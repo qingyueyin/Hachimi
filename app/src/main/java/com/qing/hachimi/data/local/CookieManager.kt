@@ -33,11 +33,16 @@ class CookieManager(context: Context) {
 
     init {
         migrateLegacyCookiesIfNeeded()
+        // 诊断日志：掉登录时对照前后两次启动的存储实现与 key 列表
+        AppLogger.info(
+            "[Cookie] Storage=${prefs.javaClass.simpleName}, " +
+                "loggedIn=${isLoggedIn()}, keys=${getCookies().keys}"
+        )
     }
 
     fun saveCookies(cookies: Map<String, String>) {
         val savedKeys = cookies.keys.filter { it in KEY_COOKIES }
-        AppLogger.info("[Cookie] Saving ${cookies.size} cookies, key cookies: $savedKeys")
+        AppLogger.info("[Cookie] Saving ${cookies.size} cookies, keys=${cookies.keys}, key cookies: $savedKeys")
         AppLogger.debug("[Cookie] MUSIC_U present=${!cookies["MUSIC_U"].isNullOrBlank()}, csrf present=${!cookies["__csrf"].isNullOrBlank()}, os=${cookies["os"]}, appver=${cookies["appver"]}")
         prefs.edit {
             cookies.forEach { (k, v) ->
