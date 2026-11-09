@@ -1123,6 +1123,20 @@ private fun ArtistAlbums(
     innerPadding: PaddingValues,
 ) {
     val gridState = rememberLazyGridState()
+    val albums = state.artistDetailAlbums
+    val hasMore = state.artistAlbumsHasMore && state.artistSectionMessage?.startsWith("专辑加载失败") != true
+    // 提前预取：专辑卡片比音乐行矮得多，一屏 4 列能摆下十几张，
+    // 滚到底才加载的话会频繁停顿。每加载完一页这组 key 变一次，触发下一次预取。
+    LaunchedEffect(
+        albums.size,
+        state.artistAlbumOffset,
+        hasMore,
+        state.isLoadingArtistAlbums,
+    ) {
+        if (hasMore && !state.isLoadingArtistAlbums) {
+            onLoadMore()
+        }
+    }
     CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(gridState).value) {
     Box(modifier = Modifier.fillMaxSize()) {
     LazyVerticalGrid(
@@ -1147,11 +1161,7 @@ private fun ArtistAlbums(
         } else if (state.artistAlbumsLoaded && state.artistDetailAlbums.isEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) { EmptyMessage("暂无专辑") }
         }
-        if (
-            state.artistAlbumsLoaded &&
-            state.artistAlbumsHasMore &&
-            state.artistSectionMessage?.startsWith("专辑加载失败") != true
-        ) {
+        if (hasMore) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 AutoLoadMore(state.isLoadingArtistAlbums, onLoadMore)
             }

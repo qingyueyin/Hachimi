@@ -621,8 +621,14 @@ class DiscoverViewModel(
         } else {
             previous.sourceMode
         }
+        // 同一位歌手上重试（热门歌曲加载失败后点重试），栈里已经有这一层，不能再压一层
+        val isSameArtist = previous.isArtistPage && previous.activeArtist?.id == artist.id
         retryDetail = { loadArtistDetail(artist, parent) }
-        val requestId = beginDetail(parent, "歌手", artist.name)
+        val requestId = if (isSameArtist) {
+            ++detailRequestId
+        } else {
+            beginDetail(parent, "歌手", artist.name)
+        }
         _uiState.value = _uiState.value.copy(
             sourceMode = SourceMode.ARTIST_DETAIL,
             artistParentSourceMode = parent,
