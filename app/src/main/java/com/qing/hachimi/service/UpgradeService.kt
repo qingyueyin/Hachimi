@@ -1,5 +1,6 @@
 ﻿package com.qing.hachimi.service
 
+import com.qing.hachimi.data.api.RateLimitException
 import com.qing.hachimi.data.api.UpgradeApi
 import com.qing.hachimi.data.local.UpgradeHistoryManager
 import com.qing.hachimi.data.model.*
@@ -26,7 +27,14 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+
+/** 一次「检查可升级版本」的结果：候选 + 因为网络/限流没能检查的歌曲数 */
+data class UpgradeCheckResult(
+    val candidates: List<Pair<SongInfo, OnlineVersion>>,
+    val failedCount: Int,
+)
 
 class UpgradeService(
     val audioAnalyzer: AudioQualityAnalyzer,
@@ -40,6 +48,9 @@ class UpgradeService(
         private const val DOWNLOAD_POLL_INTERVAL_MS = 100L
         private const val SEARCH_TIMEOUT_MS = 15_000L
         private const val MAX_CONCURRENT_SEARCHES = 3
+        /** 连续这么多首都被限流，说明不是偶发，继续打只会让封禁更久 */
+        private const val MAX_CONSECUTIVE_RATE_LIMITS = 3
+        private const val RATE_LIMIT_COOLDOWN_MS = 3000L
         private const val EMIT_EVERY = 20
         private val AUDIO_FORMATS = setOf("mp3", "flac", "wav", "aac", "ogg", "opus", "m4a", "wma", "ape", "wv")
     }
@@ -161,13 +172,18 @@ class UpgradeService(
         songs: List<SongInfo>,
         cookies: Map<String, String>,
         onProgress: (current: Int, total: Int, songName: String) -> Unit = { _, _, _ -> },
-    ): List<Pair<SongInfo, OnlineVersion>> = supervisorScope {
+    ): UpgradeCheckResult = supervisorScope {
         val semaphore = Semaphore(MAX_CONCURRENT_SEARCHES)
         val completed = AtomicInteger(0)
+        val failed = AtomicInteger(0)
+        val rateLimitStreak = AtomicInteger(0)
+        val aborted = AtomicBoolean(false)
 
-        songs.map { song ->
+        val candidates = songs.map { song ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
+                    // 已经确认被限流，排队中的歌不再发请求
+                    if (aborted.get()) return@withPermit null
                     try {
                         val bestVersion = withTimeoutOrNull(SEARCH_TIMEOUT_MS) {
                             searchOnline(song, cookies).firstOrNull { version ->
@@ -177,10 +193,21 @@ class UpgradeService(
                                 ).isUpgradeable
                             }
                         }
+                        rateLimitStreak.set(0)
                         bestVersion?.let { song to it }
                     } catch (e: CancellationException) {
                         throw e
+                    } catch (e: RateLimitException) {
+                        failed.incrementAndGet()
+                        if (rateLimitStreak.incrementAndGet() >= MAX_CONSECUTIVE_RATE_LIMITS) {
+                            aborted.set(true)
+                            throw e
+                        }
+                        delay(RATE_LIMIT_COOLDOWN_MS)
+                        null
                     } catch (e: Exception) {
+                        failed.incrementAndGet()
+                        rateLimitStreak.set(0)
                         AppLogger.error("检查在线音质失败: ${song.name}", e)
                         null
                     } finally {
@@ -189,6 +216,8 @@ class UpgradeService(
                 }
             }
         }.awaitAll().filterNotNull()
+
+        UpgradeCheckResult(candidates = candidates, failedCount = failed.get())
     }
 
     suspend fun upgradeSong(
@@ -208,16 +237,17 @@ class UpgradeService(
                 )
             }
 
-            val downloadUrl = upgradeApi.getSongUrl(
+            val urlResult = upgradeApi.getSongUrl(
                 targetVersion.id,
                 targetVersion.qualityLevel,
                 cookies
             )
+            val downloadUrl = urlResult.getOrNull()
 
             if (downloadUrl == null) {
                 return@withContext UpgradeResult(
                     success = false,
-                    error = "无法获取下载链接",
+                    error = urlResult.exceptionOrNull()?.message ?: "无法获取下载链接",
                     originalFile = song.localFile,
                     upgradedFile = null
                 )

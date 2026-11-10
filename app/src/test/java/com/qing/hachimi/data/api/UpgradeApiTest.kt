@@ -117,7 +117,7 @@ class UpgradeApiTest {
     }
 
     @Test
-    fun `test searchSong handles exception`() = runBlocking {
+    fun `test searchSong propagates exception`() {
         val mockSearchApi = mock(SearchApi::class.java)
         val mockSongApi = mock(SongApi::class.java)
 
@@ -129,9 +129,10 @@ class UpgradeApiTest {
             searchApi = mockSearchApi
         )
 
-        val results = api.searchSong("测试歌曲", "测试艺术家", emptyMap())
-
-        assertTrue(results.isEmpty())
+        // 失败要抛给调用方计数，不能当成「没有更高音质」悄悄跳过
+        assertThrows(RuntimeException::class.java) {
+            runBlocking { api.searchSong("测试歌曲", "测试艺术家", emptyMap()) }
+        }
     }
 
     @Test
@@ -157,11 +158,12 @@ class UpgradeApiTest {
 
         val url = api.getSongUrl(12345, "standard", emptyMap())
 
-        assertEquals("http://example.com/song.mp3", url)
+        // 明文链接会被 Android 拦截，取到后统一换成 https
+        assertEquals("https://example.com/song.mp3", url.getOrNull())
     }
 
     @Test
-    fun `test getSongUrl returns null on exception`() = runBlocking {
+    fun `test getSongUrl returns failure on exception`() = runBlocking {
         val mockSongApi = mock(SongApi::class.java)
         val mockSearchApi = mock(SearchApi::class.java)
 
@@ -175,7 +177,35 @@ class UpgradeApiTest {
 
         val url = api.getSongUrl(12345, "standard", emptyMap())
 
-        assertNull(url)
+        assertNull(url.getOrNull())
+        assertNotNull(url.exceptionOrNull())
+    }
+
+    @Test
+    fun `test getSongUrl reports risk control`() = runBlocking {
+        val mockSongApi = mock(SongApi::class.java)
+        val mockSearchApi = mock(SearchApi::class.java)
+
+        `when`(mockSongApi.getUrl(anyString(), anyString(), anyMap()))
+            .thenReturn(
+                SongApi.SongUrlResult(
+                    id = 12345,
+                    url = null,
+                    level = "",
+                    type = null,
+                    code = -460,
+                )
+            )
+
+        val api = UpgradeApi(
+            songApi = mockSongApi,
+            searchApi = mockSearchApi
+        )
+
+        val url = api.getSongUrl(12345, "standard", emptyMap())
+
+        assertNull(url.getOrNull())
+        assertTrue(url.exceptionOrNull()?.message.orEmpty().contains("-460"))
     }
 
     @Test

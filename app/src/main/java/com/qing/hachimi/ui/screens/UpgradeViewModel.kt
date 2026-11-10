@@ -4,16 +4,21 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.qing.hachimi.data.local.CookieManager
 import com.qing.hachimi.data.model.*
+import com.qing.hachimi.data.api.RateLimitException
 import com.qing.hachimi.service.UpgradeResult
 import com.qing.hachimi.service.UpgradeService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
+
+/** 批量升级时每首之间的间隔，避免连续请求下载链接触发风控 */
+private const val UPGRADE_INTERVAL_MS = 1200L
 
 data class ScanProgress(
     val current: Int,
@@ -170,15 +175,21 @@ class UpgradeViewModel(
                     searchProgress = SearchProgress(0, songsToCheck.size, "")
                 )
 
-                val candidates = upgradeService.findUpgradeCandidates(
+                val checkResult = upgradeService.findUpgradeCandidates(
                     songsToCheck,
                     cookies,
                 ) { current, total, songName ->
                     _uiState.value = _uiState.value.copy(
                         searchProgress = SearchProgress(current, total, songName)
                     )
-                }.map { (song, version) ->
+                }
+                val candidates = checkResult.candidates.map { (song, version) ->
                     UpgradeCandidate(song, version)
+                }
+                val failedSuffix = if (checkResult.failedCount > 0) {
+                    "，${checkResult.failedCount} 首未能检查（网络或限流）"
+                } else {
+                    ""
                 }
 
                 _uiState.value = _uiState.value.copy(
@@ -186,10 +197,19 @@ class UpgradeViewModel(
                     searchProgress = null,
                     upgradeCandidates = candidates,
                     statusMessage = if (candidates.isEmpty()) {
-                        "检查完成，没有发现更高音质版本"
+                        "检查完成，没有发现更高音质版本$failedSuffix"
                     } else {
-                        "检查完成，${candidates.size} 首歌曲可以升级"
+                        "检查完成，${candidates.size} 首歌曲可以升级$failedSuffix"
                     },
+                )
+            } catch (e: RateLimitException) {
+                val progress = _uiState.value.searchProgress
+                val checked = progress?.current ?: 0
+                val total = progress?.total ?: 0
+                _uiState.value = _uiState.value.copy(
+                    isSearching = false,
+                    searchProgress = null,
+                    error = "网易云提示操作频繁，检查已暂停（已检查 $checked/$total 首）。请等几分钟再试，或切换到手机流量。",
                 )
             } catch (e: CancellationException) {
                 _uiState.value = _uiState.value.copy(
@@ -241,6 +261,8 @@ class UpgradeViewModel(
                 candidates.forEachIndexed { index, candidate ->
                     val song = candidate.song
                     val onlineVersion = candidate.onlineVersion
+                    // 连着取下载链接容易被网易云判成异常流量（-460），每首之间留点间隔
+                    if (index > 0) delay(UPGRADE_INTERVAL_MS)
                     _uiState.value = _uiState.value.copy(
                         upgradeProgress = UpgradeProgress(
                             current = index + 1,

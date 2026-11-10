@@ -1,6 +1,7 @@
 package com.qing.hachimi.service
 
 import com.qing.hachimi.data.model.*
+import com.qing.hachimi.data.api.RateLimitException
 import com.qing.hachimi.data.api.UpgradeApi
 import com.qing.hachimi.data.local.UpgradeHistoryManager
 import com.qing.hachimi.downloader.DownloadEngine
@@ -162,10 +163,40 @@ class UpgradeServiceTest {
         }
         val service = UpgradeService(AudioQualityAnalyzer(), api, mock(), mock())
 
-        val candidates = service.findUpgradeCandidates(songs, cookies)
+        val candidates = service.findUpgradeCandidates(songs, cookies).candidates
 
         assertEquals(6, candidates.size)
         assertEquals(3, maxActive.get())
+    }
+
+    @Test
+    fun `scan stops after consecutive rate limits`() = runBlocking {
+        val api = mock(UpgradeApi::class.java)
+        val cookies = mapOf("MUSIC_U" to "token")
+        val songs = (1..12).map { index ->
+            SongInfo(
+                id = index.toLong(),
+                name = "Song $index",
+                artists = "Artist",
+                album = "Album",
+                localFile = File("Song $index - Artist.mp3"),
+                qualityInfo = quality("mp3", 128),
+            )
+        }
+        songs.forEach { song ->
+            `when`(api.searchSong(song.name, song.artists, cookies))
+                .thenAnswer { throw RateLimitException() }
+        }
+
+        val service = UpgradeService(AudioQualityAnalyzer(), api, mock(), mock())
+
+        // 连续被限流还继续扫，只会把封禁拖得更久
+        try {
+            service.findUpgradeCandidates(songs, cookies)
+            fail("连续被限流时应该停止检查")
+        } catch (e: RateLimitException) {
+            // 预期
+        }
     }
 
     @Test
@@ -185,7 +216,7 @@ class UpgradeServiceTest {
             qualityInfo = quality("flac", 1_000),
             downloadUrl = null
         )
-        `when`(api.getSongUrl(online.id, online.qualityLevel, cookies)).thenReturn("https://example.test/song.flac")
+        `when`(api.getSongUrl(online.id, online.qualityLevel, cookies)).thenReturn(Result.success("https://example.test/song.flac"))
         `when`(engine.getStatus(anyLong())).thenReturn(DownloadStatus.FAILED)
 
         try {
@@ -222,7 +253,7 @@ class UpgradeServiceTest {
             qualityInfo = quality("flac", 1_000),
             downloadUrl = null
         )
-        `when`(api.getSongUrl(online.id, online.qualityLevel, cookies)).thenReturn("https://example.test/song.flac")
+        `when`(api.getSongUrl(online.id, online.qualityLevel, cookies)).thenReturn(Result.success("https://example.test/song.flac"))
         `when`(engine.getStatus(anyLong())).thenReturn(DownloadStatus.FAILED)
 
         try {
@@ -262,7 +293,7 @@ class UpgradeServiceTest {
             qualityInfo = quality("flac", 1_000),
             downloadUrl = null,
         )
-        `when`(api.getSongUrl(online.id, online.qualityLevel, cookies)).thenReturn("https://example.test/song.mp3")
+        `when`(api.getSongUrl(online.id, online.qualityLevel, cookies)).thenReturn(Result.success("https://example.test/song.mp3"))
         `when`(engine.getStatus(anyLong())).thenReturn(DownloadStatus.COMPLETED)
         `when`(engine.getCompletedFilePath(anyLong())).thenReturn(downloaded)
         `when`(analyzer.analyzeFile(downloaded)).thenReturn(fallbackQuality)
@@ -306,7 +337,7 @@ class UpgradeServiceTest {
             qualityInfo = quality("flac", 1_000),
             downloadUrl = null
         )
-        `when`(api.getSongUrl(online.id, online.qualityLevel, cookies)).thenReturn("https://example.test/song.flac")
+        `when`(api.getSongUrl(online.id, online.qualityLevel, cookies)).thenReturn(Result.success("https://example.test/song.flac"))
         `when`(engine.getStatus(anyLong())).thenReturn(DownloadStatus.COMPLETED)
         `when`(engine.getCompletedFilePath(anyLong())).thenReturn(downloaded)
 

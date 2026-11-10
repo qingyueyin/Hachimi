@@ -52,7 +52,9 @@ class SongApi(private val api: NeteaseApi) {
         val url: String?,
         val level: String?,
         val size: Long = 0,
-        val type: String?
+        val type: String?,
+        /** 接口返回码：-460 是风控拦截，调用方可以据此重试 */
+        val code: Long = 200
     )
 
     fun getDetail(id: String, cookies: Map<String, String>): SongDetail? {
@@ -138,7 +140,8 @@ class SongApi(private val api: NeteaseApi) {
                 url = url,
                 level = d.optString("level"),
                 size = d.optLong("size"),
-                type = d.optString("type")
+                type = d.optString("type"),
+                code = code
             )
         } catch (e: Exception) {
             AppLogger.error("getUrl exception", e)
