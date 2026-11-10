@@ -59,6 +59,28 @@ class MyNavStackSyncTest {
     }
 
     @Test
+    fun `playlist card on home opens detail above home`() {
+        val stack = initialState()
+
+        assertTrue(sync(stack, MySection.HOME, detail = true, playlistId = 9L, playlistName = "首页歌单"))
+
+        assertEquals(2, stack.size)
+        assertEquals(NavKey2.MyHome, stack.first())
+        val detail = stack.last() as NavKey2.MyPlaylistDetail
+        assertEquals(9L, detail.playlistId)
+    }
+
+    @Test
+    fun `closing detail on home leaves only home`() {
+        val stack = initialState()
+        sync(stack, MySection.HOME, detail = true, playlistId = 9L, playlistName = "首页歌单")
+
+        assertTrue(sync(stack, MySection.HOME))
+
+        assertEquals(listOf<NavKey>(NavKey2.MyHome), stack)
+    }
+
+    @Test
     fun `switching section replaces the page instead of stacking`() {
         val stack = initialState()
         sync(stack, MySection.PLAYLISTS)

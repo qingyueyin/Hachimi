@@ -54,10 +54,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Album
 import top.yukonga.miuix.kmp.icon.extended.CloudFill
 import top.yukonga.miuix.kmp.icon.extended.Contacts
-import top.yukonga.miuix.kmp.icon.extended.Favorites
-import top.yukonga.miuix.kmp.icon.extended.FavoritesFill
 import top.yukonga.miuix.kmp.icon.extended.Music
-import top.yukonga.miuix.kmp.icon.extended.Playlist
 import top.yukonga.miuix.kmp.icon.extended.Recent
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.icon.extended.Stopwatch
@@ -77,10 +74,8 @@ private data class MyEntry(
     val section: MySection,
 )
 
+// 快捷入口：首页下方已经有「我的歌单」「收藏歌单」卡片区，这里不重复放
 private val myEntries = listOf(
-    MyEntry("红心歌曲", MiuixIcons.Favorites, MySection.LIKED),
-    MyEntry("我的歌单", MiuixIcons.Playlist, MySection.PLAYLISTS),
-    MyEntry("收藏歌单", MiuixIcons.FavoritesFill, MySection.COLLECTED),
     MyEntry("云盘歌曲", MiuixIcons.CloudFill, MySection.CLOUD),
     MyEntry("最近播放", MiuixIcons.Recent, MySection.RECENT),
     MyEntry("听歌排行", MiuixIcons.TopDownloads, MySection.RANK),
