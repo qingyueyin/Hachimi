@@ -549,7 +549,7 @@ class NeteaseRepository(
             val raw = api.weapiPost("v1/radio/get", payload, cookies(), callTimeoutMs = 10_000L)
             val obj = org.json.JSONObject(raw)
             if (obj.optLong("code") != 200L) {
-                val msg = obj.optString("message").ifEmpty { "绉佷汉FM鑾峰彇澶辫触" }
+                val msg = obj.optString("message").ifEmpty { "私人FM获取失败" }
                 return@withContext Result.failure(Exception(msg))
             }
             val dataArr = obj.optJSONArray("data") ?: return@withContext Result.success(emptyList())
@@ -592,7 +592,7 @@ class NeteaseRepository(
         try {
             val info = cloudApi.getCloudDownloadUrl(songId, cookies())
             if (info == null || info.url.isNullOrBlank()) {
-                return@withContext Result.failure(Exception("鏃犳硶鑾峰彇浜戠洏涓嬭浇閾炬帴"))
+                return@withContext Result.failure(Exception("无法获取云盘下载链接"))
             }
             val secureUrl = if (info.url.startsWith("http://")) "https://${info.url.substring(7)}" else info.url
             Result.success(secureUrl)
