@@ -41,6 +41,39 @@ class UpgradeHistoryManagerTest {
     }
 
     @Test
+    fun `broken records are skipped instead of failing the whole list`() {
+        val mockContext = mock(Context::class.java)
+        val mockPrefs = mock(SharedPreferences::class.java)
+        `when`(mockContext.getSharedPreferences("upgrade_history", Context.MODE_PRIVATE))
+            .thenReturn(mockPrefs)
+        `when`(mockPrefs.getString("records", "[]")).thenReturn(
+            """
+            [{"originalFile":"/a.mp3","upgradedFile":"/a.flac","originalQuality":"x",
+              "upgradedQuality":"y","timestamp":1,"status":"COMPLETED"},
+             {"originalFile":"/b.mp3"}]
+            """.trimIndent()
+        )
+
+        val records = UpgradeHistoryManager(mockContext).getRecords()
+
+        // 一条坏记录不该把整份历史弄没
+        assertEquals(1, records.size)
+        assertEquals(File("/a.mp3"), records.single().originalFile)
+    }
+
+    @Test
+    fun `broken json does not crash`() {
+        val mockContext = mock(Context::class.java)
+        val mockPrefs = mock(SharedPreferences::class.java)
+        `when`(mockContext.getSharedPreferences("upgrade_history", Context.MODE_PRIVATE))
+            .thenReturn(mockPrefs)
+        `when`(mockPrefs.getString("records", "[]")).thenReturn("{not json")
+
+        // 整份坏掉时按空记录处理，扫描不会因此永久失败
+        assertTrue(UpgradeHistoryManager(mockContext).getRecords().isEmpty())
+    }
+
+    @Test
     fun `test isUpgraded returns true for completed upgrade`() {
         val mockContext = mock(Context::class.java)
         val mockPrefs = mock(SharedPreferences::class.java)

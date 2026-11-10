@@ -234,6 +234,34 @@ class UpgradeServiceTest {
     }
 
     @Test
+    fun `renamed file with a different title falls back to search`() = runBlocking<Unit> {
+        val api = mock(UpgradeApi::class.java)
+        val downloadHistory = mock(DownloadHistoryManager::class.java)
+        val cookies = mapOf("MUSIC_U" to "token")
+        val file = File("Song - Artist.mp3")
+        val song = SongInfo(
+            id = 0,
+            name = "Song",
+            artists = "Artist",
+            album = "Album",
+            localFile = file,
+            qualityInfo = quality("mp3", 128),
+        )
+        // 路径还是老路径，但记录里的歌名和磁盘上这首歌对不上：说明文件被换过了
+        `when`(downloadHistory.loadAll()).thenReturn(
+            listOf(DownloadRecord(songId = 42, songName = "完全不同的歌", filePath = file.absolutePath))
+        )
+        `when`(api.searchSong(anyString(), anyString(), anyMap())).thenReturn(emptyList())
+
+        val service = UpgradeService(AudioQualityAnalyzer(), api, mock(), mock(), downloadHistory)
+        service.findUpgradeCandidates(listOf(song), cookies)
+
+        // 宁可慢一点去搜索，也不能拿旧 ID 去替换成别的歌
+        verify(api, never()).getQualityBySongId(anyLong(), anyMap())
+        verify(api).searchSong(anyString(), anyString(), anyMap())
+    }
+
+    @Test
     fun `unknown quality from song id is reported as unchecked`() = runBlocking {
         val api = mock(UpgradeApi::class.java)
         val downloadHistory = mock(DownloadHistoryManager::class.java)

@@ -75,9 +75,10 @@ fun List<ScannedFolder>.applyUpgrades(
         val songs = folder.songs.map { song ->
             val upgrade = byOldPath[song.localFile.absolutePath] ?: return@map song
             replaced++
+            // 只换文件和质量信息：升级不改歌名、专辑。
+            // 之前按新文件名重算歌名，保留模式新文件叫「Song [lossless]」，
+            // 列表里就变成「Song [lossless]」，再点检查还会拿这个怪名字去搜。
             song.copy(
-                name = upgrade.newFile.nameWithoutExtension.substringBefore(" - "),
-                album = upgrade.newFile.parentFile?.name ?: song.album,
                 localFile = upgrade.newFile,
                 qualityInfo = upgrade.newQuality ?: song.qualityInfo,
             )

@@ -56,8 +56,30 @@ class UpgradeModelsTest {
     }
 
     @Test
-    fun `songs not upgraded keep their original rows`() {
-        val upgradedOld = File("D:/Music/A - Artist.mp3")
+    fun `upgrade keeps the title even when the new file has a quality suffix`() {
+        val oldFile = File("D:/Music/Song - Artist.mp3")
+        // 保留原文件模式生成的新文件带音质后缀
+        val newFile = File("D:/Music/Song - Artist [lossless].flac")
+        val folder = ScannedFolder(
+            folder = File("D:/Music"),
+            songs = listOf(song(oldFile, "mp3", 128)),
+            upgradeableCount = 1,
+        )
+
+        val (folders, _) = listOf(folder).applyUpgrades(
+            upgrades = listOf(UpgradedSong(song(oldFile, "mp3", 128), newFile, quality("flac", 1000))),
+            selected = emptySet(),
+        )
+
+        val updated = folders.single().songs.single()
+        // 歌名和专辑不能被新文件名带歪，否则再点检查会拿怪名字去搜
+        assertEquals("Song", updated.name)
+        assertEquals("Album", updated.album)
+        assertEquals(newFile, updated.localFile)
+    }
+
+    @Test
+    fun `songs not upgraded keep their original rows`() {        val upgradedOld = File("D:/Music/A - Artist.mp3")
         val upgradedNew = File("D:/Music/A - Artist.flac")
         val untouched = File("D:/Music/B - Artist.mp3")
         val folder = ScannedFolder(

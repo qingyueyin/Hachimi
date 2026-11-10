@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.core.content.edit
 import com.qing.hachimi.data.model.UpgradeMode
 import com.qing.hachimi.data.model.UpgradeStatus
+import com.qing.hachimi.util.AppLogger
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -31,23 +32,33 @@ class UpgradeHistoryManager(private val context: Context) {
 
     fun getRecords(): List<UpgradeRecord> {
         val json = prefs.getString("records", "[]") ?: "[]"
-        val jsonArray = JSONArray(json)
+        val jsonArray = try {
+            JSONArray(json)
+        } catch (e: Exception) {
+            // 整份 JSON 坏了就当没有记录：不能让一条坏数据把扫描和升级页永久锁死
+            AppLogger.error("升级历史解析失败，本次按空记录处理", e)
+            return emptyList()
+        }
         val records = mutableListOf<UpgradeRecord>()
 
         for (i in 0 until jsonArray.length()) {
-            val obj = jsonArray.getJSONObject(i)
-            records.add(
+            val obj = runCatching { jsonArray.getJSONObject(i) }.getOrNull() ?: continue
+            val record = runCatching {
                 UpgradeRecord(
                     originalFile = File(obj.getString("originalFile")),
                     upgradedFile = File(obj.getString("upgradedFile")),
-                    originalQuality = obj.getString("originalQuality"),
-                    upgradedQuality = obj.getString("upgradedQuality"),
-                    timestamp = obj.getLong("timestamp"),
+                    originalQuality = obj.optString("originalQuality"),
+                    upgradedQuality = obj.optString("upgradedQuality"),
+                    timestamp = obj.optLong("timestamp"),
                     status = UpgradeStatus.valueOf(obj.getString("status")),
                     mode = runCatching { UpgradeMode.valueOf(obj.optString("mode")) }
                         .getOrDefault(UpgradeMode.AUTO_REPLACE)
                 )
-            )
+            }.getOrElse { error ->
+                AppLogger.warn("跳过损坏的升级记录 #$i: ${error.message}")
+                null
+            }
+            record?.let(records::add)
         }
 
         return records

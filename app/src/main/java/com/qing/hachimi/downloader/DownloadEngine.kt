@@ -84,6 +84,17 @@ internal object DownloadFailure {
     const val NETWORK = "网络中断，请重试"
     const val STORAGE = "无法保存文件，请检查存储权限"
     const val INTERRUPTED = "下载中断"
+    const val NETWORK_SECURITY = "下载被网络安全策略拦截（链接是明文 http 或证书异常）"
+
+    /**
+     * 按异常类型给个能指方向的原因。
+     * 原来所有 IOException 都算「存储权限」问题，明文拦截、握手失败也被指去查权限，方向是错的。
+     */
+    fun of(error: Throwable): String = when (error) {
+        is java.net.UnknownServiceException, is javax.net.ssl.SSLException -> NETWORK_SECURITY
+        is java.io.FileNotFoundException, is SecurityException -> STORAGE
+        else -> NETWORK
+    }
 }
 
 /**
@@ -454,7 +465,7 @@ class DownloadEngine(
                 throw e
             } catch (e: Exception) {
                 AppLogger.error("HEAD request failed", e)
-                updateStatus(task, DownloadStatus.FAILED, DownloadFailure.NETWORK)
+                updateStatus(task, DownloadStatus.FAILED, DownloadFailure.of(e))
                 return
             }
 
@@ -535,8 +546,9 @@ class DownloadEngine(
             if (shouldReturn) return
 
             if (!chunkSuccess) {
+                // 分片留在磁盘上：用户点「重试」时 downloadChunk 会按字节范围续传，
+                // 和「从歌曲页重新下载同一首」的行为保持一致
                 updateStatus(task, DownloadStatus.FAILED, DownloadFailure.INTERRUPTED)
-                cleanupChunks(chunkFiles)
                 return
             }
 
@@ -604,8 +616,7 @@ class DownloadEngine(
         } catch (e: Exception) {
             AppLogger.error("downloadWithChunks unexpected error", e)
             if (task.status != DownloadStatus.CANCELLED) {
-                val message = if (e is java.io.IOException) DownloadFailure.STORAGE else DownloadFailure.NETWORK
-                updateStatus(task, DownloadStatus.FAILED, message)
+                updateStatus(task, DownloadStatus.FAILED, DownloadFailure.of(e))
             }
         }
     }
@@ -685,8 +696,10 @@ val request = downloadRequest(url)
                 }
             }
             val chunkBytes = downloaded - resumeFrom
-            AppLogger.debug("[Chunk $index] Completed: $chunkBytes bytes written to ${chunkFile.name}")
-            return chunkBytes
+            AppLogger.debug("[Chunk $index] Completed: $chunkBytes new bytes written to ${chunkFile.name}")
+            // 返回分片内的绝对字节数（含之前续传的部分）：重试时 task.downloadedBytes 从 0 重算，
+            // 只回传新字节会让进度条少一半
+            return downloaded
         } finally {
             response.close()
         }
@@ -774,7 +787,11 @@ val request = downloadRequest(url)
         }
 
         AppLogger.error("[SingleStream] All $maxRetries retries exhausted for ${file.name}")
-        updateStatus(task, DownloadStatus.FAILED, DownloadFailure.NETWORK)
+        updateStatus(
+            task,
+            DownloadStatus.FAILED,
+            lastError?.let(DownloadFailure::of) ?: DownloadFailure.NETWORK,
+        )
     }
 
     private fun mergeChunks(chunks: List<File>, output: File) {
@@ -832,7 +849,7 @@ val request = downloadRequest(url)
                     if (task.job !== coroutineContext[Job] || task.status != DownloadStatus.PENDING) return@launch
                     taskSemaphore.acquire()
                     try {
-                        cleanupChunksForFile(file)
+                        // 不删 .part：失败重试要接着下，和重新下载同一首的行为一致
                         file.delete()
                         if (!awaitRunnable(task)) return@launch
                         downloadWithChunks(task, file)
@@ -914,6 +931,9 @@ val request = downloadRequest(url)
     }
 
     fun getStatus(songId: Long): DownloadStatus? = tasks[songId]?.status
+
+    /** 下载失败的具体原因，给升级等调用方直接展示，不用再翻日志 */
+    fun getErrorMessage(songId: Long): String? = tasks[songId]?.errorMessage
 
     /** Remove an internal task after its completed file has been moved elsewhere. */
     fun forgetTask(songId: Long) {

@@ -3,6 +3,7 @@
 import com.qing.hachimi.data.api.RateLimitException
 import com.qing.hachimi.data.api.UpgradeApi
 import com.qing.hachimi.data.local.DownloadHistoryManager
+import com.qing.hachimi.data.local.DownloadRecord
 import com.qing.hachimi.data.local.UpgradeHistoryManager
 import com.qing.hachimi.data.model.*
 import com.qing.hachimi.downloader.DownloadEngine
@@ -54,6 +55,8 @@ class UpgradeService(
         private const val MAX_CONSECUTIVE_RATE_LIMITS = 3
         /** 按 ID 查音质连续失败这么多次（网络断了/接口异常），就别再空转几百次 */
         private const val MAX_CONSECUTIVE_CHECK_FAILURES = 10
+        /** 下载历史里的歌名要和本地文件名对得上，才对它用「按 ID 直查」 */
+        private const val MATCH_THRESHOLD = 0.7
         private const val RATE_LIMIT_COOLDOWN_MS = 3000L
         private const val EMIT_EVERY = 20
         private val AUDIO_FORMATS = setOf("mp3", "flac", "wav", "aac", "ogg", "opus", "m4a", "wma", "ape", "wv")
@@ -184,8 +187,10 @@ class UpgradeService(
         val checkFailureStreak = AtomicInteger(0)
         val aborted = AtomicBoolean(false)
         // 下载历史里记过 songId 的歌可以直接查音质，不必走最容易限流的搜索
-        val knownIds = withContext(Dispatchers.IO) { downloadHistoryIds() }
-        val knownCount = songs.count { knownIds.containsKey(it.localFile.absolutePath.lowercase()) }
+        val historyIndex = withContext(Dispatchers.IO) { downloadHistoryIndex() }
+        val knownCount = songs.count { song ->
+            historyIndex[song.localFile.absolutePath.lowercase()]?.let { matchesHistory(song, it) } == true
+        }
         AppLogger.debug("升级检查：${songs.size} 首，其中 $knownCount 首可按 ID 直接查")
 
         val candidates = songs.map { song ->
@@ -197,7 +202,9 @@ class UpgradeService(
                         return@withPermit null
                     }
                     try {
-                        val knownId = knownIds[song.localFile.absolutePath.lowercase()]
+                        val historyRecord = historyIndex[song.localFile.absolutePath.lowercase()]
+                            ?.takeIf { matchesHistory(song, it) }
+                        val knownId = historyRecord?.songId
                         if (knownId != null) {
                             val online = upgradeApi.getQualityBySongId(knownId, cookies)
                             if (online == null) {
@@ -260,15 +267,27 @@ class UpgradeService(
         UpgradeCheckResult(candidates = candidates, failedCount = failed.get())
     }
 
-    /** 下载历史里 文件路径 → 歌曲 ID，用来跳过搜索；键统一小写，避免存储卷大小写写法不同 */
-    private fun downloadHistoryIds(): Map<String, Long> = try {
+    /** 下载历史里 文件路径 → 记录，用来跳过搜索；键统一小写，避免存储卷大小写写法不同 */
+    private fun downloadHistoryIndex(): Map<String, DownloadRecord> = try {
         downloadHistory.loadAll()
             .asSequence()
-            .filter { it.songId > 0L && it.filePath.isNotBlank() }
-            .associate { it.filePath.lowercase() to it.songId }
+            .filter { it.songId > 0L && it.filePath.isNotBlank() && it.songName.isNotBlank() }
+            .associate { it.filePath.lowercase() to it }
     } catch (e: Exception) {
         AppLogger.error("读取下载历史失败，本次全部走搜索", e)
         emptyMap()
+    }
+
+    /**
+     * 光看文件路径不够：用户手动改名后路径不变、旧 ID 还在，但文件已经是另一首歌了，
+     * 拿旧 ID 去升级会把这首换成别人的歌。所以再核一次歌名——
+     * 文件名可能是「歌名 - 歌手」也可能是「歌手 - 歌名」，两边都比一遍。
+     */
+    private fun matchesHistory(song: SongInfo, record: DownloadRecord): Boolean {
+        val onlineName = record.songName.trim()
+        if (onlineName.isEmpty()) return false
+        return UpgradeApi.nameSimilarity(song.name, onlineName) >= MATCH_THRESHOLD ||
+            UpgradeApi.nameSimilarity(song.artists, onlineName) >= MATCH_THRESHOLD
     }
 
     suspend fun upgradeSong(
@@ -429,7 +448,13 @@ class UpgradeService(
                     if (file != null && file.exists() && file.length() > 0L) return@withTimeout file
                     throw IllegalStateException("下载完成但文件不存在")
                 }
-                DownloadStatus.FAILED -> throw IllegalStateException("升级文件下载失败")
+                DownloadStatus.FAILED -> {
+                    // 引擎已经知道是「网络中断」还是「被安全策略拦了」，别再只说一句失败
+                    val reason = downloadEngine.getErrorMessage(taskId)
+                    throw IllegalStateException(
+                        if (reason.isNullOrBlank()) "升级文件下载失败" else "升级文件下载失败：$reason"
+                    )
+                }
                 DownloadStatus.CANCELLED -> throw CancellationException("升级文件下载已取消")
                 null -> throw IllegalStateException("升级下载任务未创建")
                 else -> delay(DOWNLOAD_POLL_INTERVAL_MS)

@@ -34,6 +34,51 @@ class UpgradeApi(
         private const val URL_ATTEMPTS = 2
         private const val RISK_CONTROL_RETRY_DELAY_MS = 3000L
         private const val RISK_CONTROL_MESSAGE = "网易云提示网络环境异常（-460），请切换网络或稍后再试"
+
+        /**
+         * 两个歌名的相似度，用来核对「下载历史里的这首歌」和「磁盘上这个文件」是不是同一首。
+         * 顺手抹掉文件名里常见的前后缀：首尾空白、大小写、结尾的 `[lossless]` 之类音质后缀。
+         * 放在 companion 里是故意的：调用方注入了 UpgradeApi 的 mock，实例方法会被 mock 掉。
+         */
+        fun nameSimilarity(a: String, b: String): Double =
+            calculateStringSimilarity(normalizeSongName(a), normalizeSongName(b))
+
+        private fun normalizeSongName(raw: String): String =
+            raw.trim()
+                .substringBefore(" [")
+                .trim()
+                .lowercase()
+
+        private fun calculateStringSimilarity(s1: String, s2: String): Double {
+            val longer = if (s1.length > s2.length) s1 else s2
+            val shorter = if (s1.length > s2.length) s2 else s1
+
+            if (longer.isEmpty()) return 1.0
+
+            val longerLength = longer.length
+            return (longerLength - editDistance(longer, shorter)) / longerLength.toDouble()
+        }
+
+        private fun editDistance(s1: String, s2: String): Int {
+            val costs = IntArray(s2.length + 1)
+            for (i in 0..s1.length) {
+                var lastValue = i
+                for (j in 0..s2.length) {
+                    if (i == 0) {
+                        costs[j] = j
+                    } else if (j > 0) {
+                        var newValue = costs[j - 1]
+                        if (s1[i - 1] != s2[j - 1]) {
+                            newValue = minOf(minOf(newValue, lastValue), costs[j]) + 1
+                        }
+                        costs[j - 1] = lastValue
+                        lastValue = newValue
+                    }
+                }
+                if (i > 0) costs[s2.length] = lastValue
+            }
+            return costs[s2.length]
+        }
     }
 
     /** 让同类请求按固定间隔排队发出去，避免瞬间打满被判定成异常流量 */
@@ -234,35 +279,4 @@ class UpgradeApi(
         fileSize = (this["size"] as? Number)?.toLong() ?: 0L,
         duration = (this["duration"] as? Number)?.toLong() ?: 0L,
     )
-
-    private fun calculateStringSimilarity(s1: String, s2: String): Double {
-        val longer = if (s1.length > s2.length) s1 else s2
-        val shorter = if (s1.length > s2.length) s2 else s1
-
-        if (longer.isEmpty()) return 1.0
-
-        val longerLength = longer.length
-        return (longerLength - editDistance(longer, shorter)) / longerLength.toDouble()
-    }
-
-    private fun editDistance(s1: String, s2: String): Int {
-        val costs = IntArray(s2.length + 1)
-        for (i in 0..s1.length) {
-            var lastValue = i
-            for (j in 0..s2.length) {
-                if (i == 0) {
-                    costs[j] = j
-                } else if (j > 0) {
-                    var newValue = costs[j - 1]
-                    if (s1[i - 1] != s2[j - 1]) {
-                        newValue = minOf(minOf(newValue, lastValue), costs[j]) + 1
-                    }
-                    costs[j - 1] = lastValue
-                    lastValue = newValue
-                }
-            }
-            if (i > 0) costs[s2.length] = lastValue
-        }
-        return costs[s2.length]
-    }
 }

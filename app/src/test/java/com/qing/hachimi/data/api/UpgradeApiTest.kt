@@ -244,6 +244,37 @@ class UpgradeApiTest {
     }
 
     @Test
+    fun `name similarity ignores case and quality suffix`() {
+        // 文件名里的音质后缀、大小写不该妨碍认出同一首歌
+        assertEquals(1.0, UpgradeApi.nameSimilarity("Song", "song [lossless]"), 0.001)
+        assertEquals(1.0, UpgradeApi.nameSimilarity("  晴天 ", "晴天"), 0.001)
+        assertTrue(UpgradeApi.nameSimilarity("Song", "完全不同的歌") < 0.7)
+    }
+
+    @Test
+    fun `getQualityBySongId keeps the level reported by the api`() = runBlocking {
+        val mockSongApi = mock(SongApi::class.java)
+        `when`(mockSongApi.getQualityInfo("42", emptyMap())).thenReturn(
+            mapOf<String, Any>(
+                "bestLevel" to "hires",
+                "type" to "flac",
+                "bitrate" to 1500,
+                "sampleRate" to 96000,
+                "bitDepth" to 24,
+                "size" to 100L,
+                "duration" to 0L,
+            )
+        )
+
+        val api = UpgradeApi(songApi = mockSongApi, searchApi = mock(SearchApi::class.java))
+        val quality = api.getQualityBySongId(42, emptyMap())
+
+        assertEquals("hires", quality?.qualityLevel)
+        assertEquals("flac", quality?.qualityInfo?.format)
+        assertEquals(1500, quality?.qualityInfo?.bitrate)
+    }
+
+    @Test
     fun `test getQualityInfo returns null on exception`() = runBlocking {
         val mockSongApi = mock(SongApi::class.java)
         val mockSearchApi = mock(SearchApi::class.java)
