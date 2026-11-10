@@ -11,6 +11,7 @@ import top.yukonga.miuix.kmp.nav.core.NavKey
 import top.yukonga.miuix.kmp.nav.core.rememberNavSystemCornerRadius
 import top.yukonga.miuix.kmp.nav.transition.NavTransitions
 import androidx.compose.animation.AnimatedContent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -19,6 +20,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -163,17 +169,9 @@ fun SearchTab(
             while (navStack.size > 1) navStack.removeAt(navStack.lastIndex)
         }
     }
-    NavDisplay(
-        backStack = navStack,
-        modifier = Modifier.fillMaxSize(),
-        onBack = backNav,
-        transition = NavTransitions.MiuixDefault,
-        effects = NavDisplayEffects(
-            cornerClipRadius = rememberNavSystemCornerRadius(),
-            dimAmount = 0.5f,
-        ),
-    ) {
-        entry<NavKey2.SearchHome> {
+    // 搜索首页的内容：手机放进 NavDisplay 当栈底页，宽屏放到左栏常驻。
+    // 结果列表的滚动状态和页码在外层 remember，两种布局切换时不会丢。
+    val homePane: @Composable () -> Unit = {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -408,6 +406,50 @@ fun SearchTab(
             }
         }
         }
+
+    if (rememberIsWideScreen() && navStack.size > 1) {
+        // 宽屏两栏时没有 NavDisplay，返回手势得自己接住，否则会直接退出应用
+        BackHandler { backNav() }
+        // 宽屏：左边搜索结果常驻，右边显示详情；返回只清右侧，不影响左边滚动位置
+        TwoPaneLayout(
+            sidePane = { homePane() },
+        ) {
+            PageSurface {
+                when (navStack.lastOrNull()) {
+                    is NavKey2.ArtistDetail -> artistDetailContent()
+                    is NavKey2.SearchResult -> SearchCollectionDetail(
+                        state = state,
+                        songs = sortedSongs,
+                        downloadProgress = downloadProgress,
+                        onToggleSelect = onToggleSelect,
+                        onSelectAll = onSelectAll,
+                        onDownload = onDownload,
+                        onLoadMore = onLoadMore,
+                        onRetry = onRetry,
+                        innerPadding = contextPadding,
+                        scrollToTopTrigger = scrollToTopTrigger,
+                        sortKey = "$sortOption:$sortAscending",
+                        // 右栏只有几百 dp 宽，别再分两列
+                        twoColumn = false,
+                    )
+                    else -> SearchPanePlaceholder()
+                }
+            }
+        }
+        return
+    }
+
+    NavDisplay(
+        backStack = navStack,
+        modifier = Modifier.fillMaxSize(),
+        onBack = backNav,
+        transition = NavTransitions.MiuixDefault,
+        effects = NavDisplayEffects(
+            cornerClipRadius = rememberNavSystemCornerRadius(),
+            dimAmount = 0.5f,
+        ),
+    ) {
+        entry<NavKey2.SearchHome> { homePane() }
         entry<NavKey2.ArtistDetail> {
             PageSurface {
                 artistDetailContent()
@@ -435,6 +477,21 @@ fun SearchTab(
 
 internal fun shouldShowSearchSongControls(state: SearchUiState): Boolean =
     state.searchCategory == SearchCategory.SONGS && state.songs.isNotEmpty()
+
+/** 宽屏两栏时右侧的空状态：还没点开任何一条结果 */
+@Composable
+private fun SearchPanePlaceholder() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "从左侧选择专辑、歌单或歌手",
+            color = MiuixTheme.colorScheme.onSurfaceVariantActions,
+            style = MiuixTheme.textStyles.body1,
+        )
+    }
+}
 
 private fun SearchUiState.isCurrentCategoryEmpty(sortedSongs: List<Song>): Boolean = when (searchCategory) {
     SearchCategory.SONGS -> sortedSongs.isEmpty()
@@ -560,8 +617,9 @@ private fun SearchCollectionDetail(
     innerPadding: PaddingValues,
     scrollToTopTrigger: Int = 0,
     sortKey: Any? = null,
+    twoColumn: Boolean = rememberTwoColumnListLayout(),
 ) {
-    val listState = rememberLazyListState()
+    val gridState = rememberLazyGridState()
     val detailKey = remember(state.detailHeader) {
         state.detailHeader?.let { "${it.kind.name}:${it.id}:${it.title}" } ?: state.playlistName
     }
@@ -570,19 +628,20 @@ private fun SearchCollectionDetail(
     val pagedSongs = remember(songs, currentPage) { listPage(songs, currentPage) }
     LaunchedEffect(scrollToTopTrigger) {
         if (scrollToTopTrigger > 0) {
-            listState.animateScrollToItem(0)
+            gridState.animateScrollToItem(0)
         }
     }
     LaunchedEffect(currentPage) {
         if (currentPage != previousPage) {
-            listState.scrollToItem(1)
+            gridState.scrollToItem(1)
             previousPage = currentPage
         }
     }
-    CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
+    CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(gridState).value) {
     Box(modifier = Modifier.fillMaxSize()) {
-    LazyColumn(
-        state = listState,
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(if (twoColumn) 2 else 1),
+        state = gridState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             start = AppSpacing.md,
@@ -590,9 +649,10 @@ private fun SearchCollectionDetail(
             top = innerPadding.calculateTopPadding(),
             bottom = LocalMainBottomContentPadding.current,
         ),
+        horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
     ) {
-        item {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             CollectionDetailHeader(
                 detail = state.detailHeader,
                 loadedCount = songs.size,
@@ -600,14 +660,16 @@ private fun SearchCollectionDetail(
             )
         }
         state.statusMessage?.let { message ->
-            item { SearchDetailStatus(message, onRetry) }
+            item(span = { GridItemSpan(maxLineSpan) }) { SearchDetailStatus(message, onRetry) }
         }
         if (state.isSearching) {
-            item { LoadingIndicator("正在加载${state.detailHeader?.kind?.label.orEmpty()}...") }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                LoadingIndicator("正在加载${state.detailHeader?.kind?.label.orEmpty()}...")
+            }
         } else if (songs.isEmpty()) {
-            item { SearchCategoryEmptyState("可下载内容") }
+            item(span = { GridItemSpan(maxLineSpan) }) { SearchCategoryEmptyState("可下载内容") }
         } else {
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 SongControls(
                     selectedCount = state.selectedIds.size,
                     totalCount = songs.size,
@@ -638,7 +700,7 @@ SongListItem(
         }
     }
     VerticalScrollBar(
-            adapter = rememberScrollBarAdapter(listState),
+            adapter = rememberScrollBarAdapter(gridState),
             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
         )
     }

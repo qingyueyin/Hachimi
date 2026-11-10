@@ -383,19 +383,11 @@ fun MainScreen(
         else -> dockedContentBottomPadding(systemBottom)
     }
 
-    // 宽屏下按页面类型放宽内容上限：发现页网格铺满，列表/详情次之，其余居中
-    val discoverGridHome = discoverState.currentLevel == DiscoverLevel.HOME &&
-        discoverState.sourceMode in setOf(
-            SourceMode.RECOMMEND,
-            SourceMode.PLAYLISTS,
-            SourceMode.PODCASTS,
-            SourceMode.NEW_ALBUMS,
-        )
+    // 宽屏下按页面类型放宽内容上限：设置页窄一点居中，发现/我的/搜索/下载/升级统一用列表宽度
     val contentMaxWidth = when {
         !isWideLayout -> WideScreenContentMaxWidth
-        currentTab == Tab.DISCOVER -> if (discoverGridHome) 1000.dp else 720.dp
         currentTab == Tab.SETTINGS -> 900.dp
-        else -> 800.dp
+        else -> WideListContentMaxWidth
     }
 
     val backdrop = rememberBlurBackdrop(
@@ -1039,6 +1031,8 @@ private fun TabContent(
                             onLoadMore = discoverViewModel::loadMoreArtistSection,
                             onRetry = { discoverViewModel.refreshCurrentSource() },
                             innerPadding = innerPadding,
+                            // 搜索页宽屏下自己就是左右两栏，歌手页别再拆一次
+                            twoPane = false,
                         )
                     },
                     onSearch = searchViewModel::search,

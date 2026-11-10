@@ -1,7 +1,11 @@
 package com.qing.hachimi.ui.screens
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -23,6 +27,20 @@ internal val WideScreenMinWidth = 840.dp
  * 宽屏下内容区的最大宽度，超出的部分左右留白居中。
  */
 internal val WideScreenContentMaxWidth = 640.dp
+
+/**
+ * 列表/详情类页面的内容上限。
+ *
+ * 比 [WideScreenContentMaxWidth] 宽一截：歌曲行、卡片铺满 1000dp 才不至于
+ * 在平板中间留一条窄带；两列布局时每列约 490dp，仍是手机级的可读宽度。
+ */
+internal val WideListContentMaxWidth = 1000.dp
+
+/**
+ * 宽屏两栏页面的左栏宽度（歌手页的艺人卡、搜索页的结果列表）。
+ * 320dp 足够放下封面和二级信息，右边还能留下 400dp 以上的正文。
+ */
+internal val WideSidePaneWidth = 320.dp
 
 /**
  * 宽屏下网格单元格的最大宽度，超过该值自动加列。
@@ -78,8 +96,43 @@ internal val TwoColumnListMinWidth = 1200.dp
 /**
  * 列表型内容是否分两列：只有平板横屏（≥1200dp）才分列，手机横屏和竖放平板保持单列。
  */
-internal fun useTwoColumnListLayout(contentWidth: Dp): Boolean =
-    contentWidth >= TwoColumnListMinWidth
+internal fun useTwoColumnListLayout(windowWidth: Dp): Boolean =
+    windowWidth >= TwoColumnListMinWidth
+
+/** 当前窗口是否该把列表型内容分成两列 */
+@Composable
+internal fun rememberTwoColumnListLayout(): Boolean {
+    val windowWidth = LocalWindowInfo.current.containerDpSize.width
+    return remember(windowWidth) { useTwoColumnListLayout(windowWidth) }
+}
+
+/**
+ * 宽屏两栏布局：左侧固定 [WideSidePaneWidth]，右侧占满剩余宽度。
+ * 手机/竖放平板不调用它，仍走原来的单栏页面。
+ */
+@Composable
+internal fun TwoPaneLayout(
+    modifier: Modifier = Modifier,
+    sidePane: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Row(modifier = modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .width(WideSidePaneWidth)
+                .fillMaxHeight()
+        ) {
+            sidePane()
+        }
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+        ) {
+            content()
+        }
+    }
+}
 
 /**
  * 宽屏下把内容限宽到 [maxWidth] 并水平居中；手机端原样透传。

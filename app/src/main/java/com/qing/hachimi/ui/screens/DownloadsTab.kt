@@ -5,10 +5,13 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -81,7 +84,8 @@ fun DownloadsTab(
     val resumeTargets = remember(downloadProgress) { DownloadUiModel.resumeTargets(allTasks) }
     val retryTargets = remember(downloadProgress) { DownloadUiModel.retryTargets(allTasks) }
     val completedTargets = remember(downloadProgress) { DownloadUiModel.completedTargets(allTasks) }
-    val listState = rememberLazyListState()
+    val listState = rememberLazyGridState()
+    val twoColumn = rememberTwoColumnListLayout()
     val tasks = if (selectedView == DownloadView.ACTIVE) activeTasks else completedTasks
     val groupedTasks = remember(tasks) { DownloadUiModel.groupByArtist(tasks) }
     LaunchedEffect(scrollToTopTrigger) {
@@ -95,7 +99,8 @@ fun DownloadsTab(
 
     CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
         Box(modifier = Modifier.fillMaxSize()) {
-            LazyColumn(
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(if (twoColumn) 2 else 1),
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
@@ -104,9 +109,10 @@ fun DownloadsTab(
                     top = innerPadding.calculateTopPadding(),
                     bottom = LocalMainBottomContentPadding.current,
                 ),
+                horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
                 verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
             ) {
-                item(key = "heading") {
+                item(key = "heading", span = { GridItemSpan(maxLineSpan) }) {
                     UnderlineTabsBar(
                         tabs = listOf("进行中 ${activeTasks.size}", "已完成 ${completedTasks.size}"),
                         selectedIndex = selectedView.ordinal,
@@ -115,7 +121,7 @@ fun DownloadsTab(
                     )
                 }
                 if (selectedView == DownloadView.ACTIVE) {
-                    item(key = "summary:active") {
+                    item(key = "summary:active", span = { GridItemSpan(maxLineSpan) }) {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             ActiveSummary(allTasks, sessionStartedAt)
                             if (pauseTargets.isNotEmpty() || resumeTargets.isNotEmpty() || retryTargets.isNotEmpty()) {
@@ -153,7 +159,7 @@ fun DownloadsTab(
                         }
                     }
                 } else {
-                    item(key = "summary:completed") {
+                    item(key = "summary:completed", span = { GridItemSpan(maxLineSpan) }) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -175,7 +181,7 @@ fun DownloadsTab(
                     }
                 }
                 if (tasks.isEmpty()) {
-                    item(key = "empty") {
+                    item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
                         Box(
                             modifier = Modifier.fillMaxWidth().height(180.dp),
                             contentAlignment = Alignment.Center,
@@ -193,7 +199,7 @@ fun DownloadsTab(
                     }
                 } else if (selectedView == DownloadView.COMPLETED) {
                     groupedTasks.forEach { (artist, groupTasks) ->
-                        item(key = "artist:$artist") {
+                        item(key = "artist:$artist", span = { GridItemSpan(maxLineSpan) }) {
                             ArtistGroupHeader(artist, groupTasks.size)
                         }
                         items(groupTasks, key = { it.songId }) { progress ->

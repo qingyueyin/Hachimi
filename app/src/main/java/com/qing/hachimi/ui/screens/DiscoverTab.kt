@@ -10,6 +10,8 @@ import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
 import top.yukonga.miuix.kmp.nav.core.NavKey
 import top.yukonga.miuix.kmp.nav.core.rememberNavSystemCornerRadius
 import top.yukonga.miuix.kmp.nav.transition.NavTransitions
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -1020,6 +1022,84 @@ internal fun ArtistDetailPage(
     onLoadMore: () -> Unit,
     onRetry: () -> Unit,
     innerPadding: PaddingValues,
+    twoPane: Boolean = rememberIsWideScreen(),
+) {
+    if (!twoPane) {
+        ArtistDetailSectionContent(
+            state = state,
+            songs = songs,
+            downloadProgress = downloadProgress,
+            onToggleSelect = onToggleSelect,
+            onSelectAll = onSelectAll,
+            onDownload = onDownload,
+            onAlbumClick = onAlbumClick,
+            onArtistClick = onArtistClick,
+            onSetSection = onSetSection,
+            onLoadMore = onLoadMore,
+            onRetry = onRetry,
+            innerPadding = innerPadding,
+            showLead = true,
+            paginationEnabled = true,
+        )
+        return
+    }
+    // 宽屏：艺人卡固定在左边，右边只放当前 Tab 的内容。
+    // 手机端封面是整屏宽的横幅，平板上一屏横过去 480dp 高，首屏几乎看不到歌。
+    TwoPaneLayout(
+        sidePane = {
+            Box(
+                Modifier
+                    .fillMaxHeight()
+                    .padding(top = innerPadding.calculateTopPadding())
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(start = AppSpacing.md, end = AppSpacing.xs)
+                        .padding(bottom = LocalMainBottomContentPadding.current)
+                ) {
+                    ArtistDetailLead(state, onSetSection)
+                }
+            }
+        },
+    ) {
+        ArtistDetailSectionContent(
+            state = state,
+            songs = songs,
+            downloadProgress = downloadProgress,
+            onToggleSelect = onToggleSelect,
+            onSelectAll = onSelectAll,
+            onDownload = onDownload,
+            onAlbumClick = onAlbumClick,
+            onArtistClick = onArtistClick,
+            onSetSection = onSetSection,
+            onLoadMore = onLoadMore,
+            onRetry = onRetry,
+            innerPadding = innerPadding,
+            showLead = false,
+            // 平板一屏能放下几十首，没必要再按手机页数翻页
+            paginationEnabled = false,
+        )
+    }
+}
+
+@Composable
+private fun ArtistDetailSectionContent(
+    state: DiscoverUiState,
+    songs: List<com.qing.hachimi.data.model.Song>,
+    downloadProgress: Map<Long, DownloadProgress>,
+    onToggleSelect: (Long) -> Unit,
+    onSelectAll: () -> Unit,
+    onDownload: () -> Unit,
+    onAlbumClick: (AlbumResult) -> Unit,
+    onArtistClick: (ArtistResult) -> Unit,
+    onSetSection: (ArtistDetailSection) -> Unit,
+    onLoadMore: () -> Unit,
+    onRetry: () -> Unit,
+    innerPadding: PaddingValues,
+    showLead: Boolean,
+    paginationEnabled: Boolean,
 ) {
     when (state.artistDetailSection) {
         ArtistDetailSection.HOT_SONGS -> ArtistHotSongs(
@@ -1032,6 +1112,8 @@ internal fun ArtistDetailPage(
             onSetSection = onSetSection,
             onRetry = onRetry,
             innerPadding = innerPadding,
+            showLead = showLead,
+            paginationEnabled = paginationEnabled,
         )
         ArtistDetailSection.ALBUMS -> ArtistAlbums(
             state = state,
@@ -1040,6 +1122,7 @@ internal fun ArtistDetailPage(
             onLoadMore = onLoadMore,
             onRetry = onRetry,
             innerPadding = innerPadding,
+            showLead = showLead,
         )
         ArtistDetailSection.ABOUT -> ArtistAbout(
             state = state,
@@ -1047,6 +1130,7 @@ internal fun ArtistDetailPage(
             onSetSection = onSetSection,
             onRetry = onRetry,
             innerPadding = innerPadding,
+            showLead = showLead,
         )
     }
 }
@@ -1063,12 +1147,15 @@ private fun ArtistHotSongs(
     onSetSection: (ArtistDetailSection) -> Unit,
     onRetry: () -> Unit,
     innerPadding: PaddingValues,
+    showLead: Boolean,
+    paginationEnabled: Boolean,
 ) {
     val listState = rememberLazyListState()
     val pageKey = state.activeArtist?.id ?: state.artistProfile?.name.orEmpty()
     var currentPage by remember(pageKey) { mutableIntStateOf(0) }
     var previousPage by remember(pageKey) { mutableIntStateOf(0) }
     val pagedSongs = remember(songs, currentPage) { listPage(songs, currentPage) }
+    val visibleSongs = if (paginationEnabled) pagedSongs else songs
     LaunchedEffect(currentPage) {
         if (currentPage != previousPage) {
             listState.scrollToItem(1)
@@ -1084,7 +1171,7 @@ private fun ArtistHotSongs(
         verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
     ) {
         item {
-            ArtistDetailLead(state, onSetSection)
+            if (showLead) ArtistDetailLead(state, onSetSection)
             StatusMessage(state.statusMessage, onRetry = onRetry)
         }
         if (state.isLoading) {
@@ -1099,17 +1186,21 @@ private fun ArtistHotSongs(
                     onSelectAll = onSelectAll,
                     onDownload = onDownload,
                     isPreparingDownloads = state.isPreparingDownloads,
-                    pagination = {
-                        ListPageNavigator(
-                            currentPage = currentPage,
-                            itemCount = songs.size,
-                            onPageChange = { currentPage = it },
-                            stateKey = pageKey,
-                        )
+                    pagination = if (paginationEnabled) {
+                        {
+                            ListPageNavigator(
+                                currentPage = currentPage,
+                                itemCount = songs.size,
+                                onPageChange = { currentPage = it },
+                                stateKey = pageKey,
+                            )
+                        }
+                    } else {
+                        null
                     },
                 )
             }
-            items(pagedSongs, key = { it.id }) { song ->
+            items(visibleSongs, key = { it.id }) { song ->
                 SongListItem(
                     song = song,
                     isSelected = song.id in state.selectedIds,
@@ -1136,6 +1227,7 @@ private fun ArtistAlbums(
     onLoadMore: () -> Unit,
     onRetry: () -> Unit,
     innerPadding: PaddingValues,
+    showLead: Boolean,
 ) {
     val gridState = rememberLazyGridState()
     val albums = state.artistDetailAlbums
@@ -1164,7 +1256,7 @@ private fun ArtistAlbums(
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column {
-                ArtistDetailLead(state, onSetSection)
+                if (showLead) ArtistDetailLead(state, onSetSection)
                 StatusMessage(state.artistSectionMessage, onRetry = onRetry)
             }
         }
@@ -1198,6 +1290,7 @@ private fun ArtistAbout(
     onSetSection: (ArtistDetailSection) -> Unit,
     onRetry: () -> Unit,
     innerPadding: PaddingValues,
+    showLead: Boolean,
 ) {
     val listState = rememberLazyListState()
     CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
@@ -1209,7 +1302,7 @@ private fun ArtistAbout(
         verticalArrangement = Arrangement.spacedBy(AppSpacing.lg),
     ) {
         item {
-            ArtistDetailLead(state, onSetSection)
+            if (showLead) ArtistDetailLead(state, onSetSection)
             StatusMessage(state.artistSectionMessage, onRetry = onRetry)
         }
         if (state.isLoadingArtistAbout) {
@@ -1374,7 +1467,8 @@ private fun DiscoverSongDetail(
     innerPadding: PaddingValues,
     sortKey: Any? = null,
 ) {
-    val listState = rememberLazyListState()
+    val twoColumn = rememberTwoColumnListLayout()
+    val gridState = rememberLazyGridState()
     val detailKey = remember(state.collectionDetail, state.playlistName) {
         state.collectionDetail?.let { "${it.kind.name}:${it.id}:${it.title}" }
             ?: "${state.sourceMode.name}:${state.playlistName}"
@@ -1384,14 +1478,15 @@ private fun DiscoverSongDetail(
     val pagedSongs = remember(songs, currentPage) { listPage(songs, currentPage) }
     LaunchedEffect(currentPage) {
         if (currentPage != previousPage) {
-            listState.scrollToItem(1)
+            gridState.scrollToItem(1)
             previousPage = currentPage
         }
     }
-    CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(listState).value) {
+    CompositionLocalProvider(LocalScrollDirection provides rememberScrollDirection(gridState).value) {
     Box(modifier = Modifier.fillMaxSize()) {
-    LazyColumn(
-        state = listState,
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(if (twoColumn) 2 else 1),
+        state = gridState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             start = AppSpacing.md,
@@ -1399,9 +1494,10 @@ private fun DiscoverSongDetail(
             top = innerPadding.calculateTopPadding(),
             bottom = LocalMainBottomContentPadding.current,
         ),
+        horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
     ) {
-        item {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             CollectionDetailHeader(
                 detail = state.collectionDetail ?: com.qing.hachimi.data.model.CollectionDetail(
                     kind = when (state.sourceLabel) {
@@ -1418,11 +1514,11 @@ private fun DiscoverSongDetail(
             StatusMessage(state.statusMessage, onRetry = onRetry)
         }
         if (state.isLoading) {
-            item { LoadingIndicator("正在加载...") }
+            item(span = { GridItemSpan(maxLineSpan) }) { LoadingIndicator("正在加载...") }
         } else if (songs.isEmpty()) {
-            item { EmptyMessage("暂无可下载内容") }
+            item(span = { GridItemSpan(maxLineSpan) }) { EmptyMessage("暂无可下载内容") }
         } else {
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 SongControls(
                     selectedCount = state.selectedIds.size,
                     totalCount = songs.size,
@@ -1448,7 +1544,7 @@ private fun DiscoverSongDetail(
         }
     }
     VerticalScrollBar(
-        adapter = rememberScrollBarAdapter(listState),
+        adapter = rememberScrollBarAdapter(gridState),
         modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
     )
     }

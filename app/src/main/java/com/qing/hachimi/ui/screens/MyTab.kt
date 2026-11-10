@@ -32,9 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -119,9 +117,7 @@ fun MyTab(
     scrollToTopTrigger: Int = 0,
 ) {
     // 平板横屏下，下方各类列表分两列
-    val twoColumnList = with(LocalDensity.current) {
-        useTwoColumnListLayout(LocalWindowInfo.current.containerSize.width.toDp())
-    }
+    val twoColumnList = rememberTwoColumnListLayout()
     // 顶栏高度由 Miuix TopAppBar 决定，一级页和二级页统一使用 Scaffold 给的内边距
     val primaryPadding = innerPadding
     val contextPadding = innerPadding
