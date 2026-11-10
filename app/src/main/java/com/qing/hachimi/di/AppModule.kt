@@ -96,7 +96,7 @@ val appModule = module {
 
     // 音质升级相关
     single { AudioQualityAnalyzer() }
-    single { UpgradeService(get(), get(), get(), get()) }
+    single { UpgradeService(get(), get(), get(), get(), get()) }
 
     // ViewModel
     viewModel {

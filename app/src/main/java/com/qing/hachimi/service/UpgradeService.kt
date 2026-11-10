@@ -2,6 +2,7 @@
 
 import com.qing.hachimi.data.api.RateLimitException
 import com.qing.hachimi.data.api.UpgradeApi
+import com.qing.hachimi.data.local.DownloadHistoryManager
 import com.qing.hachimi.data.local.UpgradeHistoryManager
 import com.qing.hachimi.data.model.*
 import com.qing.hachimi.downloader.DownloadEngine
@@ -40,7 +41,8 @@ class UpgradeService(
     val audioAnalyzer: AudioQualityAnalyzer,
     private val upgradeApi: UpgradeApi,
     private val historyManager: UpgradeHistoryManager,
-    private val downloadEngine: DownloadEngine
+    private val downloadEngine: DownloadEngine,
+    private val downloadHistory: DownloadHistoryManager
 ) {
 
     companion object {
@@ -50,6 +52,8 @@ class UpgradeService(
         private const val MAX_CONCURRENT_SEARCHES = 3
         /** 连续这么多首都被限流，说明不是偶发，继续打只会让封禁更久 */
         private const val MAX_CONSECUTIVE_RATE_LIMITS = 3
+        /** 按 ID 查音质连续失败这么多次（网络断了/接口异常），就别再空转几百次 */
+        private const val MAX_CONSECUTIVE_CHECK_FAILURES = 10
         private const val RATE_LIMIT_COOLDOWN_MS = 3000L
         private const val EMIT_EVERY = 20
         private val AUDIO_FORMATS = setOf("mp3", "flac", "wav", "aac", "ogg", "opus", "m4a", "wma", "ape", "wv")
@@ -177,24 +181,60 @@ class UpgradeService(
         val completed = AtomicInteger(0)
         val failed = AtomicInteger(0)
         val rateLimitStreak = AtomicInteger(0)
+        val checkFailureStreak = AtomicInteger(0)
         val aborted = AtomicBoolean(false)
+        // 下载历史里记过 songId 的歌可以直接查音质，不必走最容易限流的搜索
+        val knownIds = withContext(Dispatchers.IO) { downloadHistoryIds() }
+        val knownCount = songs.count { knownIds.containsKey(it.localFile.absolutePath.lowercase()) }
+        AppLogger.debug("升级检查：${songs.size} 首，其中 $knownCount 首可按 ID 直接查")
 
         val candidates = songs.map { song ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
-                    // 已经确认被限流，排队中的歌不再发请求
-                    if (aborted.get()) return@withPermit null
+                    // 已经确认被限流/连续失败，排队中的歌不再发请求
+                    if (aborted.get()) {
+                        failed.incrementAndGet()
+                        return@withPermit null
+                    }
                     try {
-                        val bestVersion = withTimeoutOrNull(SEARCH_TIMEOUT_MS) {
-                            searchOnline(song, cookies).firstOrNull { version ->
-                                audioAnalyzer.compareQuality(
-                                    song.qualityInfo,
-                                    version.qualityInfo,
-                                ).isUpgradeable
+                        val knownId = knownIds[song.localFile.absolutePath.lowercase()]
+                        if (knownId != null) {
+                            val online = upgradeApi.getQualityBySongId(knownId, cookies)
+                            if (online == null) {
+                                failed.incrementAndGet()
+                                if (checkFailureStreak.incrementAndGet() >= MAX_CONSECUTIVE_CHECK_FAILURES) {
+                                    AppLogger.warn("按 ID 查询音质连续失败，停止本次检查")
+                                    aborted.set(true)
+                                }
+                                return@withPermit null
                             }
+                            checkFailureStreak.set(0)
+                            rateLimitStreak.set(0)
+                            val version = OnlineVersion(
+                                id = knownId,
+                                name = song.name,
+                                artists = song.artists,
+                                album = song.album,
+                                qualityLevel = online.qualityLevel,
+                                qualityInfo = online.qualityInfo,
+                                downloadUrl = null,
+                            )
+                            version.takeIf {
+                                audioAnalyzer.compareQuality(song.qualityInfo, it.qualityInfo).isUpgradeable
+                            }?.let { song to it }
+                        } else {
+                            val bestVersion = withTimeoutOrNull(SEARCH_TIMEOUT_MS) {
+                                searchOnline(song, cookies).firstOrNull { version ->
+                                    audioAnalyzer.compareQuality(
+                                        song.qualityInfo,
+                                        version.qualityInfo,
+                                    ).isUpgradeable
+                                }
+                            }
+                            rateLimitStreak.set(0)
+                            checkFailureStreak.set(0)
+                            bestVersion?.let { song to it }
                         }
-                        rateLimitStreak.set(0)
-                        bestVersion?.let { song to it }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: RateLimitException) {
@@ -218,6 +258,17 @@ class UpgradeService(
         }.awaitAll().filterNotNull()
 
         UpgradeCheckResult(candidates = candidates, failedCount = failed.get())
+    }
+
+    /** 下载历史里 文件路径 → 歌曲 ID，用来跳过搜索；键统一小写，避免存储卷大小写写法不同 */
+    private fun downloadHistoryIds(): Map<String, Long> = try {
+        downloadHistory.loadAll()
+            .asSequence()
+            .filter { it.songId > 0L && it.filePath.isNotBlank() }
+            .associate { it.filePath.lowercase() to it.songId }
+    } catch (e: Exception) {
+        AppLogger.error("读取下载历史失败，本次全部走搜索", e)
+        emptyMap()
     }
 
     suspend fun upgradeSong(

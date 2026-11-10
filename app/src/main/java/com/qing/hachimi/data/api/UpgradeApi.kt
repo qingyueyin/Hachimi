@@ -14,6 +14,12 @@ import java.io.IOException
 /** 网易云搜索接口限流（「操作频繁」）。立刻重试只会让封禁更久，交给调用方决定是否停下 */
 class RateLimitException : IOException("网易云提示操作频繁")
 
+/** 按歌曲 ID 直接查到的在线音质：level 是「无损/Hi-Res」这类档位，qualityInfo 是具体参数 */
+data class OnlineQuality(
+    val qualityLevel: String,
+    val qualityInfo: AudioQualityInfo,
+)
+
 class UpgradeApi(
     private val songApi: SongApi,
     private val searchApi: SearchApi
@@ -22,25 +28,34 @@ class UpgradeApi(
     companion object {
         /** 搜索请求的最小间隔：并发打满会触发「操作频繁」，整个检查都会失败 */
         private const val MIN_SEARCH_INTERVAL_MS = 1000L
+        /** 按 ID 查音质的最短间隔：比搜索宽松，但也不能一口气打几百个请求 */
+        private const val MIN_DETAIL_INTERVAL_MS = 200L
         private const val RISK_CONTROL_CODE = -460L
         private const val URL_ATTEMPTS = 2
         private const val RISK_CONTROL_RETRY_DELAY_MS = 3000L
         private const val RISK_CONTROL_MESSAGE = "网易云提示网络环境异常（-460），请切换网络或稍后再试"
     }
 
-    private val searchGate = Mutex()
-    private var lastSearchAt = 0L
+    /** 让同类请求按固定间隔排队发出去，避免瞬间打满被判定成异常流量 */
+    private class RequestGate(private val intervalMs: Long) {
+        private val mutex = Mutex()
+        private var lastAt = 0L
 
-    /** 所有搜索请求共用一个节流闸门，保证两次请求至少隔 [MIN_SEARCH_INTERVAL_MS] */
-    private suspend fun awaitSearchSlot() {
-        searchGate.withLock {
-            if (lastSearchAt != 0L) {
-                val wait = MIN_SEARCH_INTERVAL_MS - (System.nanoTime() - lastSearchAt) / 1_000_000
-                if (wait > 0) delay(wait)
+        suspend fun await() {
+            mutex.withLock {
+                if (lastAt != 0L) {
+                    val wait = intervalMs - (System.nanoTime() - lastAt) / 1_000_000
+                    if (wait > 0) delay(wait)
+                }
+                lastAt = System.nanoTime()
             }
-            lastSearchAt = System.nanoTime()
         }
     }
+
+    private val searchGate = RequestGate(MIN_SEARCH_INTERVAL_MS)
+    private val detailGate = RequestGate(MIN_DETAIL_INTERVAL_MS)
+
+    private suspend fun awaitSearchSlot() = searchGate.await()
 
     private suspend fun <T> retry(
         times: Int = 3,
@@ -176,6 +191,29 @@ class UpgradeApi(
             }
         } catch (e: Exception) {
             AppLogger.error("获取音质信息失败: $songId", e)
+            null
+        }
+    }
+
+    /**
+     * 用已知的歌曲 ID 直接查在线音质，不经过搜索接口。
+     * 搜索接口对连续请求最敏感（本机日志里 1679 首全被判「操作频繁」），
+     * 本地曲库只要能从下载历史认出 ID，一首就只要 1 次请求。
+     */
+    suspend fun getQualityBySongId(
+        songId: Long,
+        cookies: Map<String, String>
+    ): OnlineQuality? = withContext(Dispatchers.IO) {
+        detailGate.await()
+        try {
+            val quality = songApi.getQualityInfo(songId.toString(), cookies)
+                ?: return@withContext null
+            val level = quality["bestLevel"] as? String ?: return@withContext null
+            OnlineQuality(qualityLevel = level, qualityInfo = quality.toAudioQualityInfo())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppLogger.error("按歌曲 ID 查询音质失败: $songId", e)
             null
         }
     }

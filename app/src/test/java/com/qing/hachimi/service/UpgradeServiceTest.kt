@@ -1,8 +1,11 @@
 package com.qing.hachimi.service
 
 import com.qing.hachimi.data.model.*
+import com.qing.hachimi.data.api.OnlineQuality
 import com.qing.hachimi.data.api.RateLimitException
 import com.qing.hachimi.data.api.UpgradeApi
+import com.qing.hachimi.data.local.DownloadHistoryManager
+import com.qing.hachimi.data.local.DownloadRecord
 import com.qing.hachimi.data.local.UpgradeHistoryManager
 import com.qing.hachimi.downloader.DownloadEngine
 import com.qing.hachimi.downloader.DownloadStatus
@@ -33,7 +36,8 @@ class UpgradeServiceTest {
             audioAnalyzer = mock(),
             upgradeApi = mock(),
             historyManager = mock(),
-            downloadEngine = mock()
+            downloadEngine = mock(),
+            downloadHistory = mock()
         )
         
         assertTrue(service.isAudioFile(File("test.mp3")))
@@ -50,7 +54,8 @@ class UpgradeServiceTest {
             audioAnalyzer = mock(),
             upgradeApi = mock(),
             historyManager = mock(),
-            downloadEngine = mock()
+            downloadEngine = mock(),
+            downloadHistory = mock()
         )
         
         assertFalse(service.isAudioFile(File("test.txt")))
@@ -67,7 +72,7 @@ class UpgradeServiceTest {
         `when`(analyzer.analyzeFile(audioFile)).thenReturn(quality("mp3", 320))
 
         try {
-            val service = UpgradeService(analyzer, mock(), history, mock())
+            val service = UpgradeService(analyzer, mock(), history, mock(), mock())
 
             val song = service.scanFolders(listOf(folder)).single().songs.single()
 
@@ -88,7 +93,7 @@ class UpgradeServiceTest {
         `when`(analyzer.analyzeFile(audioFile)).thenReturn(quality("flac", 1_000))
 
         try {
-            val service = UpgradeService(analyzer, mock(), history, mock())
+            val service = UpgradeService(analyzer, mock(), history, mock(), mock())
 
             val songs = service.scanFolders(listOf(folder)).single().songs
 
@@ -109,7 +114,7 @@ class UpgradeServiceTest {
         files.forEach { `when`(analyzer.analyzeFile(it)).thenReturn(quality("mp3", 320)) }
 
         try {
-            val service = UpgradeService(analyzer, mock(), history, mock())
+            val service = UpgradeService(analyzer, mock(), history, mock(), mock())
             val batches = mutableListOf<List<SongInfo>>()
 
             val result = service.scanFoldersIncremental(
@@ -161,7 +166,7 @@ class UpgradeServiceTest {
             `when`(api.matchConfidence(song.name, song.artists, online)).thenReturn(1.0)
             song
         }
-        val service = UpgradeService(AudioQualityAnalyzer(), api, mock(), mock())
+        val service = UpgradeService(AudioQualityAnalyzer(), api, mock(), mock(), mock())
 
         val candidates = service.findUpgradeCandidates(songs, cookies).candidates
 
@@ -188,7 +193,7 @@ class UpgradeServiceTest {
                 .thenAnswer { throw RateLimitException() }
         }
 
-        val service = UpgradeService(AudioQualityAnalyzer(), api, mock(), mock())
+        val service = UpgradeService(AudioQualityAnalyzer(), api, mock(), mock(), mock())
 
         // 连续被限流还继续扫，只会把封禁拖得更久
         try {
@@ -197,6 +202,62 @@ class UpgradeServiceTest {
         } catch (e: RateLimitException) {
             // 预期
         }
+    }
+
+    @Test
+    fun `songs known from download history skip search`() = runBlocking<Unit> {
+        val api = mock(UpgradeApi::class.java)
+        val downloadHistory = mock(DownloadHistoryManager::class.java)
+        val cookies = mapOf("MUSIC_U" to "token")
+        val file = File("Song - Artist.mp3")
+        val song = SongInfo(
+            id = 0,
+            name = "Song",
+            artists = "Artist",
+            album = "Album",
+            localFile = file,
+            qualityInfo = quality("mp3", 128),
+        )
+        `when`(downloadHistory.loadAll()).thenReturn(
+            listOf(DownloadRecord(songId = 42, songName = "Song", filePath = file.absolutePath))
+        )
+        `when`(api.getQualityBySongId(42, cookies))
+            .thenReturn(OnlineQuality("lossless", quality("flac", 1_000)))
+
+        val service = UpgradeService(AudioQualityAnalyzer(), api, mock(), mock(), downloadHistory)
+        val candidates = service.findUpgradeCandidates(listOf(song), cookies).candidates
+
+        assertEquals(1, candidates.size)
+        assertEquals(42L, candidates.single().second.id)
+        // 能按 ID 查就不该再打搜索接口：搜索才是被限流的那条路
+        verify(api, never()).searchSong(anyString(), anyString(), anyMap())
+    }
+
+    @Test
+    fun `unknown quality from song id is reported as unchecked`() = runBlocking {
+        val api = mock(UpgradeApi::class.java)
+        val downloadHistory = mock(DownloadHistoryManager::class.java)
+        val cookies = mapOf("MUSIC_U" to "token")
+        val file = File("Song - Artist.mp3")
+        val song = SongInfo(
+            id = 0,
+            name = "Song",
+            artists = "Artist",
+            album = "Album",
+            localFile = file,
+            qualityInfo = quality("mp3", 128),
+        )
+        `when`(downloadHistory.loadAll()).thenReturn(
+            listOf(DownloadRecord(songId = 42, songName = "Song", filePath = file.absolutePath))
+        )
+        `when`(api.getQualityBySongId(42, cookies)).thenReturn(null)
+
+        val service = UpgradeService(AudioQualityAnalyzer(), api, mock(), mock(), downloadHistory)
+        val result = service.findUpgradeCandidates(listOf(song), cookies)
+
+        assertTrue(result.candidates.isEmpty())
+        // 查不到音质不等于「没有更高音质」，要如实报成未检查
+        assertEquals(1, result.failedCount)
     }
 
     @Test
@@ -220,7 +281,7 @@ class UpgradeServiceTest {
         `when`(engine.getStatus(anyLong())).thenReturn(DownloadStatus.FAILED)
 
         try {
-            val service = UpgradeService(mock(), api, history, engine)
+            val service = UpgradeService(mock(), api, history, engine, mock())
             val result = service.upgradeSong(
                 SongInfo(0, "Song", "Artist", "Album", original, quality("mp3", 320)),
                 online,
@@ -257,7 +318,7 @@ class UpgradeServiceTest {
         `when`(engine.getStatus(anyLong())).thenReturn(DownloadStatus.FAILED)
 
         try {
-            val service = UpgradeService(mock(), api, history, engine)
+            val service = UpgradeService(mock(), api, history, engine, mock())
             val result = service.upgradeSong(
                 SongInfo(0, "Song", "Artist", "Album", original, quality("mp3", 320)),
                 online,
@@ -302,7 +363,7 @@ class UpgradeServiceTest {
         )
 
         try {
-            val service = UpgradeService(analyzer, api, mock(), engine)
+            val service = UpgradeService(analyzer, api, mock(), engine, mock())
 
             val result = service.upgradeSong(
                 SongInfo(0, "Song", "Artist", "Album", original, originalQuality),
@@ -350,7 +411,7 @@ class UpgradeServiceTest {
         )
 
         try {
-            val service = UpgradeService(analyzer, api, history, engine)
+            val service = UpgradeService(analyzer, api, history, engine, mock())
             val result = service.upgradeSong(
                 SongInfo(0, "Song", "Artist", "Album", original, originalQuality),
                 online,
