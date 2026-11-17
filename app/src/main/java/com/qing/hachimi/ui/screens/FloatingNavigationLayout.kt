@@ -22,6 +22,15 @@ internal fun shouldCaptureBarBackdrop(
     effect: FloatingBarEffect,
 ): Boolean = blurEnabled || effect == FloatingBarEffect.LIQUID_GLASS
 
+/**
+ * 宽屏导航形态只看「启用悬浮栏」：开着走底栏，关着走侧边栏。
+ * 模糊和悬浮栏效果只决定底栏长什么样；悬浮栏关闭时这两项在设置里根本不可见，不能反过来把侧栏挤掉。
+ */
+internal fun shouldUseNavigationRail(
+    railScreen: Boolean,
+    floatingNavigationBar: Boolean,
+): Boolean = railScreen && !floatingNavigationBar
+
 internal fun resolveFloatingBarStyle(
     effect: FloatingBarEffect,
     blurEnabled: Boolean,

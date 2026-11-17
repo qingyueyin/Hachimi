@@ -114,4 +114,29 @@ class FloatingNavigationLayoutTest {
         assertEquals(76.dp * 3 + 8.dp, compactFloatingBarWidth(3, 1280.dp))
         assertEquals(52.dp * 6 + 8.dp, compactFloatingBarWidth(6, 1280.dp))
     }
+
+    @Test
+    fun `tablet uses the rail once the floating bar is off`() {
+        // 模糊开着、效果还是毛玻璃也一样：悬浮栏关了就该是侧边栏
+        assertEquals(
+            true,
+            shouldUseNavigationRail(railScreen = true, floatingNavigationBar = false),
+        )
+    }
+
+    @Test
+    fun `tablet keeps the floating bar while it is on`() {
+        assertEquals(
+            false,
+            shouldUseNavigationRail(railScreen = true, floatingNavigationBar = true),
+        )
+    }
+
+    @Test
+    fun `phones never use the rail`() {
+        assertEquals(
+            false,
+            shouldUseNavigationRail(railScreen = false, floatingNavigationBar = false),
+        )
+    }
 }

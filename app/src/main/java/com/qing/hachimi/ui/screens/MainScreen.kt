@@ -31,7 +31,6 @@ import android.content.Intent
 import android.os.SystemClock
 import android.widget.Toast
 import com.qing.hachimi.activity.NeteaseWebLoginActivity
-import com.qing.hachimi.data.local.FloatingBarEffect
 import com.qing.hachimi.data.local.SettingsManager
 import com.qing.hachimi.data.model.SourceMode
 import com.qing.hachimi.downloader.DownloadProgress
@@ -144,12 +143,10 @@ fun MainScreen(
     var showBrowserLoginCacheDialog by remember { mutableStateOf(false) }
     var accountHistoryVersion by remember { mutableIntStateOf(0) }
     // 侧边导航栏：够宽或横屏大尺寸时启用（参考 SukiSU），展开状态跟随设置保存。
-    // 用户开启了悬浮底栏特效（毛玻璃/液态玻璃）时，优先保留底部悬浮栏，不换成侧边栏。
+    // 只有「启用悬浮栏」开着才走底栏；模糊和悬浮栏效果只影响底栏样式，不改变导航形态。
     val railScreen = rememberIsNavigationRailScreen()
-    val floatingBarGlass = uiState.floatingBarEffect == FloatingBarEffect.LIQUID_GLASS ||
-        (uiState.floatingBarEffect == FloatingBarEffect.FROSTED_GLASS && uiState.blurEffect)
-    val useRail = railScreen && !floatingBarGlass && !uiState.floatingNavigationBar
-    // 宽屏布局与侧边栏是两件事：开了玻璃特效仍然算宽屏，只是底栏不换成侧边栏
+    val useRail = shouldUseNavigationRail(railScreen, uiState.floatingNavigationBar)
+    // 宽屏布局与侧边栏是两件事：开了玻璃特效仍然算宽屏，只是底栏不换侧栏
     val isWideLayout = railScreen
     // 设置页改用导航栈：二级页是栈上的一层，返回由 NavDisplay 处理
     val navBackStack = rememberMainNavBackStack()
