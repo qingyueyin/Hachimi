@@ -16,6 +16,9 @@ class NeteaseApi(internal val client: OkHttpClient) {
         private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
         // iPhone UA for eapi requests, matching api-enhanced's request.js
         private const val EAPI_USER_AGENT = "NeteaseMusic 9.0.90/5038 (iPhone; iOS 16.2; zh_CN)"
+        // 取播放/下载链接专用：手机端 UA 会被网易云 -460 风控，桌面客户端 UA 正常
+        const val SONG_URL_USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/91.0.4472.164 NeteaseMusicDesktop/3.1.29.205117"
 
         val QUALITY_MAP = mapOf(
             "standard" to "标准",
@@ -94,15 +97,15 @@ class NeteaseApi(internal val client: OkHttpClient) {
 
     /**
      * EAPI POST - matches api-enhanced's request.js eapi format with:
-     * - iPhone User-Agent (not Chrome)
      * - Full cookie header with os/device/channel info + URL-encoded values
-     * - This ensures the server generates valid download URLs without authSecret
+     * - User-Agent 可按接口覆盖；取播放链接必须用桌面客户端 UA
      */
     fun eapiPost(
         path: String,
         payload: String,
         cookies: Map<String, String>,
         callTimeoutMs: Long? = null,
+        userAgent: String = EAPI_USER_AGENT,
     ): String {
         val params = NeteaseCrypto.encryptParams("/eapi/$path", payload)
         val now = System.currentTimeMillis()
@@ -127,7 +130,7 @@ class NeteaseApi(internal val client: OkHttpClient) {
 
         val request = Request.Builder()
             .url("$BASE_URL/eapi/$path")
-            .header("User-Agent", EAPI_USER_AGENT)
+            .header("User-Agent", userAgent)
             .header("Referer", "https://music.163.com/")
             .header("Cookie", cookieStr)
             .post(formBody("params", params))

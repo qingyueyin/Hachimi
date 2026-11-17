@@ -204,7 +204,7 @@ class UpgradeApi(
             if (result == null) {
                 return@withContext Result.failure(IOException("获取下载链接失败，请检查网络后重试"))
             }
-            if (result.code == RISK_CONTROL_CODE) {
+            if (result.code == RISK_CONTROL_CODE || result.dataCode == RISK_CONTROL_CODE) {
                 AppLogger.warn("获取下载链接被风控拦截(-460): $songId")
                 if (attempt < URL_ATTEMPTS - 1) delay(RISK_CONTROL_RETRY_DELAY_MS)
                 return@repeat

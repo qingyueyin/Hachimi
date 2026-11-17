@@ -97,16 +97,49 @@ class NeteaseRepository(
     suspend fun getSongUrlWithType(songId: String, quality: String): Result<Pair<String, String>> = withContext(Dispatchers.IO) {
         // Quality fallback: try selected quality first, then step down to lower qualities
         val fallbackOrder = NeteaseApi.fallbackQuality(quality)
+        val requestCookies = cookies()
+        val loggedIn = cookieManager.isLoggedIn()
         var lastError: String? = null
 
         for (q in fallbackOrder) {
             try {
                 AppLogger.debug("getSongUrl: id=$songId quality=$q (trying)")
-                val result = songApi.getUrl(songId, q, cookies())
-                    ?: continue
+                val result = songApi.getUrl(songId, q, requestCookies)
+                if (result == null) {
+                    lastError = "接口没有返回数据"
+                    continue
+                }
+
+                // -460 是风控，跟音质无关；继续降音质只会重复撞同一堵墙
+                if (result.code == RISK_CONTROL_CODE || result.dataCode == RISK_CONTROL_CODE) {
+                    AppLogger.warn("getSongUrl: risk control (-460) for $songId at quality=$q")
+                    return@withContext Result.failure(
+                        Exception("网易云风控拦截（-460），请切换网络或稍后再试")
+                    )
+                }
+                if (result.code == NEED_LOGIN_CODE) {
+                    AppLogger.warn("getSongUrl: login required (301) for $songId")
+                    return@withContext Result.failure(
+                        Exception("登录已失效，请重新登录后再下载")
+                    )
+                }
 
                 val url = result.url
                 if (url.isNullOrBlank() || url == "null") {
+                    // 404 是这首歌没有播放权限，降音质也拿不到，直接给出真实原因
+                    if (result.dataCode == PERMISSION_DENIED_CODE || result.code == PERMISSION_DENIED_CODE) {
+                        AppLogger.warn("getSongUrl: no permission (404) for $songId at quality=$q")
+                        return@withContext Result.failure(
+                            Exception(
+                                if (loggedIn) {
+                                    "该歌曲当前账号无播放权限（可能是 VIP 专享或已下架）"
+                                } else {
+                                    "登录已失效或未登录，请重新登录后再下载"
+                                }
+                            )
+                        )
+                    }
+                    lastError = result.message.takeIf { it.isNotBlank() } ?: "接口没有返回下载链接"
                     AppLogger.warn("getSongUrl: url is null/blank for $songId at quality=$q, trying next")
                     continue
                 }
@@ -128,7 +161,12 @@ class NeteaseRepository(
         }
 
         AppLogger.error("getSongUrl: all qualities failed for $songId, last error: $lastError")
-        return@withContext Result.failure(Exception("所有音质均不可用，可能VIP限制，请尝试登录后重试"))
+        return@withContext Result.failure(
+            Exception(
+                lastError?.takeIf { it.isNotBlank() }?.let { "获取下载链接失败：$it" }
+                    ?: "获取下载链接失败，请检查网络后重试"
+            )
+        )
     }
 
     suspend fun getLyric(songId: String): Result<String> = withContext(Dispatchers.IO) {
@@ -847,6 +885,9 @@ class NeteaseRepository(
     companion object {
         private const val DEFAULT_COVER_SIZE = 640
         private const val SEARCH_ARTIST_ALBUM_PAGE_SIZE = 50
+        private const val RISK_CONTROL_CODE = -460L
+        private const val PERMISSION_DENIED_CODE = 404L
+        private const val NEED_LOGIN_CODE = 301L
         private val SEARCH_PUNCTUATION = Regex("[\\p{P}]+")
         private val SEARCH_WHITESPACE = Regex("\\s+")
 

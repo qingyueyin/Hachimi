@@ -54,7 +54,10 @@ class SongApi(private val api: NeteaseApi) {
         val size: Long = 0,
         val type: String?,
         /** 接口返回码：-460 是风控拦截，调用方可以据此重试 */
-        val code: Long = 200
+        val code: Long = 200,
+        /** data[0].code：200 正常，404 表示无播放权限 */
+        val dataCode: Long = 0,
+        val message: String = "",
     )
 
     fun getDetail(id: String, cookies: Map<String, String>): SongDetail? {
@@ -84,16 +87,19 @@ class SongApi(private val api: NeteaseApi) {
             val buildver = System.currentTimeMillis().toString().take(10)
             val headerObj = JSONObject().apply {
                 put("os", "pc")
-                put("osver", cookies["osver"] ?: "Microsoft-Windows-10-Professional-build-19045-64bit")
+                put("osver", "Microsoft-Windows-10-Professional-build-19045-64bit")
                 put("deviceId", cookies["deviceId"] ?: "pyncm!")
-                put("appVer", cookies["appver"] ?: "")
-                put("versioncode", cookies["versioncode"] ?: "140")
-                put("mobilename", cookies["mobilename"] ?: "")
-                put("buildver", cookies["buildver"] ?: buildver)
-                put("resolution", cookies["resolution"] ?: "1920x1080")
+                put("appver", "3.1.17.204416")
+                put("versioncode", "140")
+                put("mobilename", "")
+                put("buildver", buildver)
+                put("resolution", "1920x1080")
                 put("__csrf", cookies["__csrf"] ?: "")
-                put("channel", cookies["channel"] ?: "netease")
+                put("channel", "netease")
                 put("requestId", (20000000..30000000).random().toString())
+                if ((cookies["NMTID"] ?: "").isNotEmpty()) {
+                    put("NMTID", cookies["NMTID"]!!)
+                }
                 if ((cookies["MUSIC_U"] ?: "").isNotEmpty()) {
                     put("MUSIC_U", cookies["MUSIC_U"]!!)
                 }
@@ -117,22 +123,33 @@ class SongApi(private val api: NeteaseApi) {
                 payload.toString(),
                 cookies,
                 callTimeoutMs = 15_000L,
+                userAgent = NeteaseApi.SONG_URL_USER_AGENT,
             )
             val obj = JSONObject(raw)
 
-            // Check for error code in response
+            // 非 200 也要把 code 带回去：-460 是风控，调用方需要单独提示
             val code = obj.optLong("code")
             if (code != 200L) {
-                AppLogger.warn("getUrl returned code=$code")
-                return null
+                val msg = obj.optString("message").ifEmpty { obj.optString("msg") }
+                AppLogger.warn("getUrl returned code=$code msg=$msg")
+                return SongUrlResult(
+                    id = id.toLongOrNull() ?: 0L,
+                    url = null,
+                    level = null,
+                    type = null,
+                    code = code,
+                    dataCode = code,
+                    message = msg,
+                )
             }
 
             val d = obj.optJSONArray("data")?.optJSONObject(0) ?: return null
             val url = d.optString("url").ifEmpty { null }
             val errorMsg = d.optString("message").ifEmpty { d.optString("msg") }
+            val dataCode = if (d.has("code")) d.optLong("code") else code
 
             if (url == null) {
-                AppLogger.warn("URL is null for song $id (level=$level, code=$code, msg=$errorMsg)")
+                AppLogger.warn("URL is null for song $id (level=$level, code=$code, dataCode=$dataCode, msg=$errorMsg)")
             }
 
             SongUrlResult(
@@ -141,7 +158,9 @@ class SongApi(private val api: NeteaseApi) {
                 level = d.optString("level"),
                 size = d.optLong("size"),
                 type = d.optString("type"),
-                code = code
+                code = code,
+                dataCode = dataCode,
+                message = errorMsg,
             )
         } catch (e: Exception) {
             AppLogger.error("getUrl exception", e)

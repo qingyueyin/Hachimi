@@ -44,14 +44,17 @@ object DownloadPreparation {
         val formattedArtists: String,
     )
 
-    data class BatchResult(val added: Int, val failed: Int) {
+    data class BatchResult(val added: Int, val failed: Int, val error: String? = null) {
         val message: String
             get() = when {
-                added == 0 -> "获取下载链接失败，请重试"
-                failed > 0 -> "已添加 $added 首，$failed 首失败"
+                added == 0 -> error ?: "获取下载链接失败，请重试"
+                failed > 0 -> error?.let { "已添加 $added 首，$failed 首失败：$it" }
+                    ?: "已添加 $added 首，$failed 首失败"
                 else -> "已添加 $added 首到下载队列"
             }
     }
+
+    private data class PrepareOutcome(val success: Boolean, val error: String? = null)
 
     fun optionsFrom(
         settings: SettingsManager,
@@ -128,8 +131,9 @@ object DownloadPreparation {
             }
         }.awaitAll()
         BatchResult(
-            added = outcomes.count { it },
-            failed = outcomes.count { !it },
+            added = outcomes.count { it.success },
+            failed = outcomes.count { !it.success },
+            error = outcomes.firstOrNull { !it.success }?.error,
         )
     }
 
@@ -141,7 +145,7 @@ object DownloadPreparation {
         engine: DownloadEngine,
         options: Options,
         urlProvider: suspend (Song) -> Result<Pair<String, String>>,
-    ): Boolean {
+    ): PrepareOutcome {
         return try {
             coroutineScope {
                 val urlRequest = async {
@@ -186,16 +190,16 @@ object DownloadPreparation {
                 lyricPayload.sidecar?.let { content ->
                     writeSidecar(song, lyricPayload.formattedArtists, content, directory, settings, engine, options)
                 }
-                true
+                PrepareOutcome(true)
             }
         } catch (e: TimeoutCancellationException) {
             AppLogger.warn("Download preparation timed out for ${song.name}")
-            false
+            PrepareOutcome(false, "获取下载链接超时，请检查网络后重试")
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             AppLogger.warn("Download preparation failed for ${song.name}: ${e.message}")
-            false
+            PrepareOutcome(false, e.message?.takeIf { it.isNotBlank() })
         }
     }
 
